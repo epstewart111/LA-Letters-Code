@@ -1,0 +1,328 @@
+
+
+*directories
+include setup.do
+global log $dua/SD-CHCF/epstewar/LA_letters/Code
+local dt = "`c(current_date)' `c(current_time)'"
+log using "$log/Logs/results_`dt'.log"
+global data $dua/SD-CHCF/epstewar/LA_letters/Data
+global boot $dua/SD-CHCF/epstewar/LA_letters/Bootstrap
+global output $dua/SD-CHCF/epstewar/LA_letters/Results
+global graph $dua/SD-CHCF/epstewar/LA_letters/Graphs
+
+*load data
+foreach file in /*mme*/ vme {
+use $data/analytic_weekly_`file', clear
+
+*no of prescribers in each study arm
+egen tag = tag(presid)
+ta is_let if tag, matcell(x1)
+drop tag
+
+*transpose matrix of presc. counts by study arm
+matrix pres_ct = x1'
+matrix list pres_ct
+
+*no decedents in each study arm 
+egen tag = tag(decid)
+ta is_let if tag, matcell(x2)
+drop tag
+
+*transpose dec. count
+matrix dec_ct = x2'
+
+*append matrices to output 
+matrix total_ct = dec_ct\pres_ct
+matrix colnames total_ct = stand comp
+matrix rownames total_ct = dec_ct pres_ct
+
+*models with MME or VME as DV
+foreach out in log_pills log_total {
+
+*tobit
+metobit `out' is_let##post || decid: || presid:, ll(0) nolog dnumerical
+
+*put coefficients in matrix
+matrix `out'co = r(table)
+}
+
+*adjusted bseline values
+keep if post == 0
+
+*replace baseline obs. with post = 1 to get adjusted weekly value
+replace post = 1
+
+*remove outliers equal to or greater than 91st percentile
+if "`file'" == "mme" {
+egen float pct = pctile(w`file'_total), p(91)
+}
+
+if "`file'" == "vme" {
+egen float pct = pctile(w`file'_total), p(93)
+}
+keep if w`file'_total < pct
+
+*add coefficients to df
+gen post_b1 = e(b)[1,4]*post
+gen let_b2 = e(b)[1,2]*is_let
+gen post_let_b3 = e(b)[1,8]*is_let*post
+
+*add all effects for given levels and exponentiate to get change in value (source: Science supplement)
+gen perc_chng = exp(post_b1+let_b2+post_let_b3)
+
+*adjusted pre-intervention means
+gen w`file'_adj = perc_chng*w`file'_total
+gen diff = w`file'_adj - w`file'_total
+save $data/est_`file', replace
+
+putexcel set $output/results_`file'.xlsx, sheet(table3) modify
+foreach var in w`file'_total w`file'_adj diff {
+
+*95% CIs
+use $data/est_`file', clear
+bootstrap r(mean), reps(500): sum `var' if is_let == 0
+matrix `var'_cont = r(table)[1,1]
+matrix `var'_cont_lcl = r(table)[5,1] 
+matrix `var'_cont_ucl = r(table)[6,1]
+
+bootstrap r(mean), reps(500): sum `var' if is_let == 1 
+matrix `var'_let = r(table)[1,1]
+matrix `var'_let_lcl = r(table)[5,1] 
+matrix `var'_let_ucl = r(table)[6,1]
+
+*output trimmed preintervention mean for control to dataframe 
+svmat `var'_cont
+egen tag = tag(`var'_cont1)
+drop if tag == 0
+drop tag
+keep `var'_cont1
+gen is_let = 0
+save $data/`var'_cont, replace
+
+*output trimmed preintervention mean for letter
+svmat `var'_let
+egen tag = tag(`var'_let1)
+drop if tag == 0
+drop tag
+keep `var'_let1 
+gen is_let = 1
+save $data/`var'_let, replace
+} 
+
+*diff-in-diff
+matrix diff_in_diff = diff_let-diff_cont
+
+*bootstrapping post-intervention diff-in-diff CIs
+set seed 135790
+
+local i = 2000
+local j = 12000
+
+forvalues i = 1(1)`i' {
+
+*sample obs from data
+use $data/est_`file', clear
+keep w`file'_adj is_let presid
+bsample `j', strata(is_let) 
+
+ttest w`file'_adj, by(is_let)
+matrix w`file'_adj_cont`i' = (r(mu_1))
+matrix w`file'_adj_let`i' = (r(mu_2))
+
+*convert matrix of adj. means based on bootstrapped sample to variable
+svmat w`file'_adj_cont`i'
+keep w`file'_adj_cont`i'1
+egen tag = tag(w`file'_adj_cont`i'1)
+drop if tag == 0
+drop tag
+
+svmat w`file'_adj_let`i'
+rename (w`file'_adj_let`i'1 w`file'_adj_cont`i'1) (w`file'_adj_let w`file'_adj_cont)
+gen samp = `i'
+save $boot/w`file'_adj_let`i', replace
+}
+
+use $boot/w`file'_adj_let1, clear
+
+forvalues i = 2/2000 {
+append using $boot/w`file'_adj_let`i'
+}
+
+*merge with preintervention means for each study arm
+merge 1:1 _n using $data/w`file'_total_cont, nogen
+merge 1:1 _n using $data/w`file'_total_let, nogen
+
+*fill preintervention means in each row
+egen w`file'_pre_cont = max(w`file'_total_cont1)
+egen w`file'_pre_let = max(w`file'_total_let1)
+drop is_let w`file'_total_cont1 w`file'_total_let1
+
+*pre-to-post difference control 
+gen diff_cont = w`file'_adj_cont - w`file'_pre_cont
+
+*pre-to-post difference letter 
+gen diff_let = w`file'_adj_let - w`file'_pre_let
+
+*diff-in-diff 
+sort diff_cont diff_let
+gen w`file'_adj_diff_in_diff = diff_let - diff_cont
+
+xtile pct = w`file'_adj_diff_in_diff, n(40)
+sort w`file'_adj_diff_in_diff
+gen rn = _n
+list if rn == 50 | rn == 1950
+
+*quantile approach
+collapse (last) w`file'_adj_diff_in_diff, by(pct)
+keep if pct == 1 | pct == 39
+xpose, clear 
+mkmat v1, matrix(w`file'_adj_did_lcl)
+matrix w`file'_adj_did_lcl = w`file'_adj_did_lcl[2,1]
+matrix list w`file'_adj_did_lcl
+mkmat v2, matrix (w`file'_adj_did_ucl)
+matrix w`file'_adj_did_ucl = w`file'_adj_did_ucl[2,1]
+matrix list w`file'_adj_did_ucl
+
+*matrices for table 3
+matrix pre = w`file'_total_let, w`file'_total_let_lcl, w`file'_total_let_ucl, w`file'_total_cont, w`file'_total_cont_lcl, w`file'_total_cont_ucl
+matrix post = w`file'_adj_let, w`file'_adj_let_lcl, w`file'_adj_let_ucl, w`file'_adj_cont, w`file'_adj_cont_lcl, w`file'_adj_cont_ucl
+matrix diff = diff_let, diff_let_lcl, diff_let_ucl, diff_cont, diff_cont_lcl, diff_cont_ucl
+matrix did = diff_in_diff, w`file'_adj_did_lcl, w`file'_adj_did_ucl,.,.,.
+matrix table3 = pre\post\diff\did
+matrix colnames table3 = "comp" "lcl" "ucl" "stand" "lcl" "ucl"
+matrix rownames table3 = "pre" "post" "diff" "diff-in-diff"
+putexcel A1 = matrix(table3), names nformat(number_d4)
+putexcel A2:A5 B1:G1, bold
+
+*decedent and prescriber counts
+putexcel I1 = matrix(total_ct), names nformat(number_d4)
+putexcel J1:K1 I2:I3, bold
+
+*output to excel 
+putexcel set $output/results_`file'.xlsx, sheet(primary) modify
+
+*new patients
+use $data/analytic_weekly_`file', clear
+melogit new_pat_di is_let##post || decid: || presid:
+
+*coefficient matrix
+matrix new_pat_dico = r(table)
+
+*reconfigure coefficients
+foreach name in log_totalco log_pillsco new_pat_dico  { 
+
+matrix list `name'
+matrix `name'1 = `name'[1..6,2]
+matrix `name'2 = `name'[1..6,4]
+matrix `name'3 = `name'[1..6,8..11]
+
+*merge matrices
+matrix `name' = `name'1, `name'2, `name'3 
+matrix colnames `name' = :letter :post-treatment :letter*post-treatment :constant :var(decid) :var(decid[presid])
+matrix rownames `name' = coefficient SE t P-value lcl ucl 
+matrix list `name'
+}
+
+*put coefficients in spreadsheet 
+putexcel A1 = "Log `file'/day" I1 = "Log `file'/total" A11 = "New starts", bold 
+putexcel A2 = matrix(log_totalco') I2 = matrix(log_pillsco') A12 = matrix(new_pat_dico'), names nformat(number_d4) 
+putexcel A3:A9 B2:G2 I3:I9 J2:O2 A13:A18 B12:G12, bold
+
+*logistic regression for high dose prescriptions
+if "`file'" == "mme" {
+foreach out in fifty_di ninety_di {
+
+melogit `out' is_let##post || decid: || presid:
+
+*matrices of coefficients 
+matrix `out'co = r(table)
+
+*output to excel  
+putexcel set $output/results_`file'.xlsx, sheet(secondary) modify
+
+*reconfigure coefficients
+matrix `out'co1 = `out'co[1..6,2]
+matrix `out'co2 = `out'co[1..6,4]
+matrix `out'co3 = `out'co[1..6,8..11]
+
+*merge matrices
+matrix `out'co = `out'co1, `out'co2, `out'co3 
+matrix colnames `out'co = :letter :post-treatment :letter*post-treatment :constant :var(decid) :var(decid[presid])
+matrix rownames `out'co = coefficient SE t P-value lcl ucl 
+matrix list `out'co
+}
+putexcel A1 = "=> 50" I1 = "> 90", bold 
+putexcel A2 = matrix(fifty_dico') I2 = matrix(ninety_dico'), names nformat(number_d4) 
+putexcel A3:A8 B2:G2 I3:I8 J2:O2, bold
+}
+*close high-dose rx loop for MME file only 
+
+*excel sheet for post-hoc analyses
+putexcel set $output/results_`file'.xlsx, sheet(posthoc) modify
+
+*no. of decedents/prov. by dec. category 
+egen tag = tag(presid decid_cat decid_ct)
+tab decid_ct decid_cat if tag == 1, matcell(dec)
+matrix dec_cat = dec'
+matrix colnames dec_cat = :1 :2 :3
+matrix rownames dec_cat = decid_cat0 decid_cat1 
+matrix list dec_cat
+drop tag
+
+*threeway interaction
+metobit log_total post##is_let##decid_cat || decid: || presid:, ll(0) nolog dnumerical
+estimates store m1 
+
+*put coefficients in matrix
+matrix decco = r(table)
+
+*put coefficients in matrix 
+matrix c1 = decco[1..6, 2]
+matrix c2 = decco[1..6, 4]
+matrix c3 = decco[1..6, 8]
+matrix c4 = decco[1..6, 10]
+matrix c5 = decco[1..6, 14]
+matrix c6 = decco[1..6, 18]
+matrix c7 = decco[1..6, 26..29]
+matrix decco = c1, c2, c3, c4, c5, c6, c7
+matrix colnames decco = :post :letter :letter*post :decid_cat :decid_cat*post :decid_cat*letter :decid_cat*letter*post :constant :var(decid) :var(decid[presid])
+matrix rownames decco = coefficient SE t P-value lcl ucl
+matrix list decco
+
+*tobit w/log_mme based on study period (beginning vs. end)
+metobit log_total is_let##start is_let##end || decid: || presid:, ll(0) nolog dnumerical
+
+*put coefficients in matrix
+matrix twopartco = r(table)
+matrix list twopartco
+
+*difference between study start and end coefficients
+lincom _b[1.is_let#1.start] - _b[1.is_let#1.end]
+
+*merge lincom results into one matrix
+matrix eoc = r(estimate), r(se), r(z), r(p), r(lb), r(ub)
+matrix colnames eoc = Est SE z P-value lcl ucl
+matrix rownames eoc = .
+matrix list eoc
+
+*put coefficients in matrix
+matrix c1 = twopartco[1..6, 2]
+matrix c2 = twopartco[1..6, 4]
+matrix c3 = twopartco[1..6, 8]
+matrix c4 = twopartco[1..6, 10]
+matrix c5 = twopartco[1..6, 14..17]
+matrix twopartco = c1, c2, c3, c4, c5
+matrix colnames twopartco = :letter :start :letter*start :end :letter*end :constant :var(decid) :var(decid[presid])
+matrix rownames twopartco = coefficient SE t P-value lcl ucl 
+matrix list twopartco
+
+putexcel A1 = "Two-phase tobit" I1 = "No. of decedents tobit" Q1 = "Decedent CT by letter" A12 = "EOC" , bold
+putexcel A2 = matrix(twopartco') I2 = matrix(decco') Q2 = matrix(dec_cat) A13 = matrix(eoc), names nformat(number_d4)
+putexcel A3:A10 B2:G2 B13:G13 I3:I12 J2:O2, bold 
+}
+
+
+
+
+
+
