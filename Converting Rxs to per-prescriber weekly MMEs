@@ -1,0 +1,195 @@
+
+****************************************************************************************************************
+**Goals:												                                                                               *
+***a. create file with daily MME per prescriber                                                                *         
+**ES June 14, 2022                                                                                             *
+**FILE: letters_sample.dta created in la_letters_mme.sas                                                       *
+****************************************************************************************************************
+
+*set more off
+*cap log close
+include setup.do
+global log $dua/SD-CHCF/epstewar/LA_letters/Code
+local dt = "`c(current_date)' `c(current_time)'"
+log using "$log/Logs/datasetup_`dt'.log"
+global data $dua/SD-CHCF/epstewar/LA_letters/Data
+
+foreach var in mme vme {
+	
+*import file 
+use $data/letters_sample_`var', clear
+
+*powder form of lorazepam with no strength listed:
+drop if `var' == .
+
+*make variables lower-case
+rename *, lower
+
+*select days in study period 
+drop if period == .
+
+*no. prescribers
+egen tag = tag(presid) 
+ta tag 
+drop tag
+
+*no. decedents
+egen tag = tag(decid)
+ta tag
+drop tag
+
+*number of prescriptions in study period
+*Opioid Rxs = 559,658 
+*Benzo Rxs = 384,768
+
+*number of orders per prescriber
+bys presid dayssince: gen n = _n 
+
+* first prescription of a patient
+bys patid: egen min_day = min(dayssince)
+gen new_pat = dayssince == min_day
+
+*identify and remove new patients with duplicate rxs for same day/doctor
+bys patid dayssince: gen n_visit_firstday = _n
+replace new_pat = 0 if n_visit_firstday > 1
+
+*high dose prescriptions 
+gen ninetymore = `var' > 90
+gen fiftymore = `var' >= 50
+sort dayssince
+
+* collapse data to physician+day level
+collapse (max) n_orders = n (sum) d`var'_total = `var' (first) decid (first) decid_ct (first) is_let (sum) n_new_pat = new_pat (sum) n_ninetymore = ninetymore (sum) n_fiftymore = fiftymore (sum) `var'_per_pres (mean) dayssupply_mean = dayssupply (sum) dayssupply_total = dayssupply, by(presid dayssince)
+
+*save file
+save $data/collapsed.dta, replace
+*describe
+
+*generate a file with physician ids and all days in the analyzing frame 
+clear
+set obs 541
+gen presid = _n
+expand 366
+bys presid: gen dayssince = _n
+*to get day 0
+replace dayssince = dayssince - 1
+expand 2
+egen tag = tag(presid dayssince)
+*baseline 
+replace dayssince = -dayssince if tag == 0
+drop tag
+duplicates drop 
+
+*check no. of pres./day-should be 731 
+*tab presid
+
+* merge in analytical data and fill in 0
+merge 1:1 presid dayssince using $data/collapsed, keep(master match) nogen
+foreach name in n_orders d`var'_total n_new_pat `var'_per_pres n_ninetymore n_fiftymore dayssupply_mean dayssupply_total {
+	replace `name' = 0 if mi(`name')
+}
+
+*assign treatment and decid to days with missing info from merge
+bys presid: egen decid_max = max(decid)
+bys presid: egen is_let_max = max(is_let)
+bys presid: egen decid_ct_max = max(decid_ct)
+drop decid is_let decid_ct
+rename decid_max decid 
+rename is_let_max is_let 
+rename decid_ct_max decid_ct
+*ssc install mdesc
+*mdesc
+
+*create post-intervention variable
+*diff-in-diff model
+gen post = inrange(dayssince, 0, 365)
+
+*3 months;
+gen start = inrange(dayssince, 0, 119)
+*4-12 months;
+gen end = dayssince > 119
+
+*remove prescribers with no rx who are not in original data 
+bys presid: egen max_d`var'_total = max(d`var'_total)
+drop if max_d`var'_total==0
+drop max_d`var'_total
+
+*washout period
+drop if inrange(dayssince, 0, 30)
+
+*no. prescribers
+*N = 510 for opioid Rxs
+*N = 528 for Benzos
+egen tag = tag(presid) 
+ta tag 
+drop tag
+
+*no. decedents
+*N = 219 for Opioids 
+*N = 220 for Benzos
+egen tag = tag(decid)
+ta tag
+drop tag
+
+*check no. of days per-prescriber
+*700 days/prescriber excluding washout period with weekends
+tab presid 
+
+*check missing 
+mdesc
+
+*log transformation:
+gen log_total=log(d`var'_total)
+replace log_total=0 if d`var'_total==0 | log_total < 0 
+
+*save daily file
+save $data/analytic_daily_`var', replace
+
+*aggregate dmme by week 
+gen week = mod(dayssince, 7) == 0 if dayssince < 0
+replace week = mod(dayssince, 7) == 3 if dayssince > 0
+sort presid dayssince 
+by presid: gen week_id = sum(week)
+drop week 
+
+*collapse data to physician+week level and save
+collapse (sum) n_orders (sum) w`var'_total = d`var'_total (first) decid (first) decid_ct (first) is_let (sum) n_new_pat (sum) n_ninetymore (sum) n_fiftymore ///
+(sum) w`var'_total_pills = `var'_per_pres (first) start_day = dayssince (last) end_day = dayssince (mean) dayssupply_mean = dayssupply_total, by(presid week_id)
+
+*post_intervention
+gen post = week_id > 52
+*3-month effect
+gen start = inrange(week_id, 53, 70) 
+*4-12 month effect 
+gen end = week_id > 70
+
+*log transformation for weekly data
+gen log_total=log(w`var'_total)
+gen log_pills = log(w`var'_total_pills)
+replace log_total = 0 if w`var'_total == 0 | log_total < 0
+replace log_pills = 0 if w`var'_total_pills == 0 | log_pills < 0
+
+*providers with > 1 decedent
+gen decid_cat = decid_ct > 1
+tab decid_cat
+
+*dichotomous 0 (no new pat./week) vs. 1 (at least one new pat./week)
+gen new_pat_di = n_new_pat > 0
+tab new_pat_di
+
+*dichotomous 0 vs. 1 for high dose prescriptions > 50 
+gen fifty_di = n_fiftymore > 0
+tab fifty_di
+
+*high dose prescriptions 
+gen ninety_di = n_ninetymore > 0
+tab ninety_di
+
+*save weekly file 
+save $data/analytic_weekly_`var', replace
+describe
+}
+
+
+
+
