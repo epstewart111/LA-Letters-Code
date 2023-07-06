@@ -1,0 +1,88 @@
+ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2.xlsx";
+
+libname table "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
+
+proc import out = temp
+datafile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/la_letters_prescriber_demos.xlsx"
+dbms = xlsx;
+getnames = yes;
+run;
+
+data temp2;
+length ethn $ 32. length spec $ 32.;
+set temp;
+*race/ethnicity;
+if Cultural_Background = '' then ethn = '';
+else if Cultural_Background in ('Chinese' 'Chinese; Taiwanese' 'Filipino' 'Filipino; Other Hispanic' 'Indian' 'Pakistani' 'Korean' 'Other Asian' 
+'Vietnamese' 'Vietnamese; Other Asian' 'Thai' 'Taiwanese') then ethn = 'Asian';
+else if Cultural_Background in ('African' 'African American' 'Black; African' 'Black')
+then ethn = 'Black';
+else if Cultural_Background in ('European' 'White' 'White; Middle Eastern' 'Middle Eastern' 'Middle Eastern; Other Hispanic')
+then ethn = 'White';
+else if Cultural_Background in ('Mexican' 'Other Hispanic' 'South American')
+then ethn = 'Hispanic'; 
+else if Cultural_Background = 'Declined' then ethn = 'Declined';
+else ethn = 'Other';
+
+*prescriber speciality;
+if Primary_Specialty = '' then spec = '';
+else if Primary_Specialty in ('Emergency' 'Emergency Medicine') then spec = 'EM';
+else if Primary_Specialty in ('Family' 'Family Medicine') then spec = 'FM';
+else if Primary_Specialty = 'General Practice' then spec = 'GP';
+else if Primary_Specialty in ('Internal' 'Internal Medicine') then spec = 'IM';
+else if Primary_Specialty = 'Psychiatry' then spec = 'Psych';
+else spec = 'Other';
+
+*prescriber type;
+if type in ('DDS' 'DDS, MD' 'DMD') then presc_type = 'DDS';
+else if type in ('DNP' 'FNP' 'NP' 'RNNP') then presc_type = 'NP';
+else if type = 'MD' then presc_type = 'MD';
+else if type = 'PA' then presc_type = 'PA';
+else if type = 'DO' then presc_type = 'DO';
+else presc_type = 'Other';
+
+where Prescriber_ID ne 'P019' and Prescriber_ID ne 'P476';
+run;
+
+/*proc sort data = temp2;
+by letter;
+run;
+
+proc freq data = temp2;
+table type presc_type primary_specialty spec gender cultural_background ethn/missing;
+by letter;
+run;*/
+
+data county;
+input letter no county $;
+cards;
+1 9 P
+0 11 P
+1 8 LB
+0 14 LB
+1 240 LA
+0 259 LA
+;
+run;
+
+proc freq data = county;
+tables county*letter/chisq;
+weight no;
+title "Chi-square prescriber county by letter";
+run;
+
+*check if proportions differ between study arms;
+%macro chk(v);
+proc freq data = temp2;
+table letter*&v/missing chisq;
+title "Chi-square prescriber &v by letter";
+run;
+%mend chk;
+/*%chk(type)*/
+%chk(presc_type);
+/*%chk(primary_specialty);*/
+%chk(spec);
+%chk(gender);
+/*%chk(cultural_background);*/
+%chk(ethn);
+ods excel close;
