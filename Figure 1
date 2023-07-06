@@ -1,0 +1,46 @@
+##########################################################################################################
+##graph which shows post effect at different levels of is_let and decid_cat (no. of decedents 1 vs. > 1)
+##ES October 14, 2022
+##########################################################################################################
+
+#libraries
+library(readr)
+library(ggplot2)
+library(dplyr)
+
+#int <- read.csv("/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/R bar chart v2.csv")
+#int
+
+#opioid data (Table 4 in results spreadsheet on drive)
+post <- c(464.97, 73.78, 96.29, 84.74)
+lcl <- c(431.36, 65.86, 93.66, 82.55)
+ucl <- c(498.57, 81.70, 98.91, 86.93)
+Letter <- c('Standard', 'Comparator', 'Standard', 'Comparator')
+dec <- c('>1 death', '>1 death', '1 death', '1 death')
+opioids <- data.frame(post, lcl, ucl, Letter, dec)
+opioids
+
+#benzo data (Table 4 in results spreadsheet on drive) 
+post <- c(1278.43, 405.22, 39.25, 31.78)
+lcl <- c(1193.56, 368.11, 38.13, 30.76)
+ucl <- c(1363.29, 442.34, 40.36, 32.81)
+Letter <- c('Standard', 'Comparator', 'Standard', 'Comparator')
+dec <- c('>1 death', '>1 death', '1 death', '1 death')
+benzos <- data.frame(post, lcl, ucl, Letter, dec)
+benzos
+
+#Figure 1
+graph <- function(df) {
+ggplot(df, aes(fill = Letter, x = dec, y = post)) + geom_bar(stat = "Identity", position = position_dodge()) +
+geom_errorbar(aes(x = dec, ymin = lcl, ymax = ucl), width = 0.4, position = position_dodge(0.9)) +
+ylab("Adjusted Total Weekly Mean VME Post-Intervention") +
+xlab("") + 
+theme_bw() + 
+theme(axis.text=element_text(size = 13))  +
+theme(axis.title.y=element_text(size = 16, margin = margin(t=0, r=16, b=0, l=0))) +
+scale_fill_manual(values=c("darkblue", "skyblue"))
+
+#save plot
+ggsave("/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Graphs/Fig1.jpg")
+}
+graph(benzos)
