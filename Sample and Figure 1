@@ -1,0 +1,548 @@
+/*********************************************************************************************************************************************
+*FILE GOALS                                                                                                                                  *
+*****1. IMPORT DATA, MERGE WITH CDC, AND WHERE MISSING NDC, PRODUCT NAME CW TO GET DRUG STRENGTH                                             *
+*****2. GET PER-RX, PER-CLINICIAN MME                                                                                                        *
+*****3. GET TOTAL NO. RXS AND SAMPLE COUNTS FOR FIGURE ONE FLOW DIAGRAM                                                                      *
+*ES JULY 7, 2023                                                                                                                             *
+**********************************************************************************************************************************************/
+
+*output summary stats. for fig. 1;
+ods pdf file = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Sample_mme.pdf";
+
+*filepath;
+libname outtable "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
+
+*import data-proc import doesn't correctly recognize variable types;
+*five excel spreadsheets for two separate CURES files;
+%macro imp (file, file2);
+  %do i = 1 %to 5;
+         data &file._temp&i;
+            %let _EFIERR_ = 0; 
+             infile "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/&file._sheet&i..csv" delimiter = ',' MISSOVER DSD lrecl=32767 firstobs=2;
+               informat PRESID $32. ;
+               informat NEWCLUSTERID $32. ;
+               informat PATID $32. ;
+               informat IS_LET best32. ;
+               informat LETTERID mmddyy10. ;
+               informat DAYSSINCE best32. ;
+               informat NDC $11. ;
+               informat DRUGNAME $35. ;
+               informat FORM $3. ;
+               informat STRENGTH $24. ;
+               informat QTY best32. ;
+               informat DAYSSUPPLY best32. ;
+               format PRESID $32. ;
+               format NEWCLUSTERID $32. ;
+               format PATID $32. ;
+               format IS_LET best12. ;
+               format LETTERID mmddyy10. ;
+               format DAYSSINCE best12. ;
+               format NDC $11. ;
+               format DRUGNAME $35. ;
+               format FORM $3. ;
+               format STRENGTH $24. ;
+               format QTY best12. ;
+               format DAYSSUPPLY best12. ;
+               input
+                      PRESID  $
+                      NEWCLUSTERID  $
+                      PATID  $
+                      IS_LET
+                      LETTERID
+                      DAYSSINCE
+                      NDC  $
+                      DRUGNAME  $
+                      FORM  $
+                      STRENGTH  $
+                      QTY
+                      DAYSSUPPLY
+            ;
+           if _ERROR_ then call symputx('_EFIERR_',1);  
+           run;
+        %end;
+
+data &file2;
+	set
+	%do i = 1 %to 5;
+ &file._temp&i
+%end;
+;
+run;
+%mend imp;
+%imp (Report_part1, outtable.partone_all);
+%imp (Report_part2, outtable.parttwo_all);
+
+*combine data;
+*Total Rxs: 9,551,768 (including non-scheduled);
+data outtable.study_all;
+set outtable.partone_all outtable.parttwo_all;
+
+*study period variable;
+if -365 <= dayssince <= 0 then period = 0;
+else if 31 <= dayssince <= 365 then period = 1;
+newclusterid_st = strip(newclusterid);
+run;
+
+*import opioid NDCs, product name crosswalk and opioid conversion table;
+%macro imp (file, file2, sheet);
+proc import datafile = "&file" out = &file2
+dbms = xlsx
+replace;
+sheet = "&sheet";
+getnames = yes;
+run;
+%mend imp;
+%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/opioid_ndcs.xlsx, outtable.opioid_ndc, Sheet1);
+%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/opioid_conversion.xlsx, outtable.opioid_conversion, Sheet1);
+%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/product_name_cw.xlsx, outtable.product_name_cw, Sheet1);
+
+*convert conversion_factor to numeric;
+data outtable.opioid_conversion;
+set outtable.opioid_conversion;
+Conversion_Factorn = input(Conversion_Factor, 8.);
+run;
+
+*merge study data with CDC crosswalk by NDC;
+proc sql;
+create table temp2 as
+select t.presid, t.patid, t.newclusterid, t.letterid, t.qty, t.dayssupply, t.strength, t.drugname, t.is_let, t.dayssince, t.period, 
+l.NDC, l.Product_Name, l.Drug, l.Strength_Per_Unit, form
+from outtable.study_all t
+left join
+outtable.opioid_ndc l
+on t.NDC = l.NDC;
+quit;
+
+*create file, NDC_miss with NDC match;
+proc sql;
+create table NDC_miss AS
+select * from temp2
+where NDC = '';
+quit;
+
+*remove characters and separate dosages for combo drugs;
+data ingredient_temp;
+set ndc_miss;
+
+*remove letters and characters, except -;
+strength_new = prxchange('s/((%|;)|(([a-z]{1,})?(\/)(\d)?\.?(\d)? ?)?[a-z]{1,})//i', -1, strength);
+
+*break combo drugs (e.g., 12-10-5) into separate variables;
+array break(*) $32 dose1-dose4;
+array breakn(*) dosen1-dosen4;
+
+i = 1;
+do while (scan(strength_new, i, "-") ne "");
+break(i) = scan(strength_new, i, "-");
+
+*convert to numeric;
+if break(i) ne "" then do;
+breakn(i) = input(break(i), 8.);
+end;
+i+1;
+end;
+
+*convert fentanyl that's in mgs to microcrams;
+if (drugname = 'FENTANYL CITRATE' and 0.04 <= dosen1 <= 1.6) 
+or (drugname = "FENTANYL TRANSDERMAL SYSTEM" and dosen1 = 1.28) 
+or (drugname = "ORAL TRANSMUCOSAL FENTANYL CITRATE")
+then do;
+dosen1 = dosen1*1000;
+end;
+
+keep presid patid newclusterid letterid qty dayssupply drugname NDC strength strength_new dosen1-dosen4 is_let dayssince period form;
+run;
+
+*must strip/remove leading and trailing blanks to merge;
+data ingredient_temp;
+set ingredient_temp;
+drugname = strip(drugname);
+run;
+
+data outtable.product_name_cw;
+set outtable.product_name_cw;
+product_name = strip(product_name);
+run;
+
+*select distinct obs. from cw;
+proc sql;
+create table cw_temp as
+select distinct product_name, drug, strength as strength_per_unit from outtable.product_name_cw;
+quit;
+
+*join study data with non-matching CDC NDC and product name cross walk by drug type and strength per unit;
+*multiple merges to accomodate combo. drugs each w/different dose (e.g., dosen1, dosen2, etc.);
+proc sql;
+create table ndc_complete_miss as
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen1 = l.strength_per_unit)
+union all
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen2 = l.strength_per_unit)
+union all
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen3 = l.strength_per_unit)
+union all
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen4 = l.strength_per_unit);
+quit;
+
+*remove buprenorphine;
+*NDC missing;
+data ndc_complete_miss;
+set ndc_complete_miss;
+*delete buprenorphine-don't use for conversions;
+if drug = "Buprenorphine" then delete;
+cw_id = 'PRODUCT';
+run;
+
+*NDCs not missing;
+data ndc_nonmiss;
+set temp2;
+cw_id = 'NDC';
+where NDC ne '' and drug ne "Buprenorphine";
+run;
+
+*check data with missing NDCs;
+proc sql;
+title "check crosswalk";
+select count(*) as ct, product_name, strength_new, strength_per_unit, drug from ndc_complete_miss
+group by product_name, strength_new, strength_per_unit, drug
+order by product_name, strength_new;
+quit;
+
+*appends Rxs with missing and non-missing NDCs;
+proc sql;
+create table outtable.NDC_all as
+(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, product_name, qty, dayssupply, '' as convert, 
+drug, NDC, strength, strength_per_Unit, form, cw_id from ndc_nonmiss)
+union all
+(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, product_name, qty, dayssupply, '' as convert,
+drug, NDC, strength_new as strength, strength_per_unit, form, cw_id from ndc_complete_miss);
+quit;
+
+*change fentanyl drug names to match conversion crosswalk;
+data outtable.NDC_all;
+length drug $ 17 cw_id $ 32;
+set outtable.NDC_all;
+if product_name = "DURAGESIC" or product_name = "FENTANYL TRANSDERMAL SYSTEM"
+or (product_name = "FENTANYL" and form = "TDM") or product_name = "NOVAPLUS FENTANYL" 
+or product_name = "NOVAPLUS FENTANYL TRANSDERMAL SYSTEM"
+then drug = "Fentanyl:patch";
+if product_name = "ACTIQ" or product_name = "FENTANYL CITRATE" or product_name = "ORAL TRANSMUCOSAL FENTANYL CITRATE"
+then drug = "Fentanyl:lozenge";
+if product_name = "FENTORA" or product_name = "ABSTRAL" or (product_name = "FENTANYL" and form = "TAB") then drug = "Fentanyl:tablet";
+if product_name = "LAZANDA" or product_name = "SUBSYS" then drug = "Fentanyl:spray";
+run;
+
+*merge with conversion table;
+proc sort data = outtable.NDC_all;
+by drug;
+run;
+
+proc sort data=outtable.opioid_conversion;
+by drug;
+run;
+
+*MME calculation;
+data outtable.total; 
+length cw_id $ 32;
+merge outtable.NDC_all (in = ina) outtable.opioid_conversion;
+by drug;
+if ina;
+run;
+
+*MME calculation-dmme = per/day, tmme/total mme in community;
+data total_mme;
+length cw_id $ 32;
+set outtable.total (rename = (presid = presold newclusterid = newclusterid_s));
+if (qty < dayssupply) then qty = dayssupply;
+if (dayssupply in (.,0)) then dayssupply = qty;
+conversion_factorn = input(conversion_factor, 8.);
+mme = strength_per_unit*(qty/dayssupply)*conversion_factorn;
+mme_per_pres = strength_per_unit*qty*conversion_factorn;
+*remove PRESID prefix from presid;
+pres = prxchange('s/(PRESID)//',-1, presold);
+*remove CID prefix from decid;
+newclusterid = prxchange('s/(CID)//',-1, newclusterid_s);
+decid = input(newclusterid, 8.);
+presid = input(pres, 8.);
+newclusterid_st = strip(newclusterid_s);
+run;
+
+*letter assignment for removed decedents because no data in study period;           
+proc sql;
+title "Letter assignment of removed decedents (no data in study period)";
+select distinct newclusterid_st, is_let from outtable.study_all
+where newclusterid_st not in
+(select newclusterid_s from total_mme where period ne .);
+quit;
+
+*get letter assignment for prescribers removed due to Rxs in study period;
+proc sql;
+Title "Letter assignment of removed prescribers (no Rxs in study)";
+select count(distinct presid) as ct, is_let from outtable.study_all
+where presid not in
+(select distinct presold from total_mme where period ne .)
+group by is_let;
+quit;
+
+*count prescribers, decedents, w/duplicate decedents;
+proc sql;
+title "Total no. prescribers, and decedents in study period for final file (w/duplicate decedents)";
+select count(distinct presid) as ct_pres, count(distinct decid) as ct_dec, is_let from
+total_mme where period ne .
+group by is_let;
+quit;
+      
+*dec. id per provider;
+proc sql;
+create table outtable.pres_dec as
+select distinct presid, decid, newclusterid_st, letterid from total_mme
+order by presid, letterid desc;
+quit;      
+       
+*get first decedent;
+data outtable.pres_dec_first;
+set outtable.pres_dec;
+by presid;
+if first.presid then decid_ct = 1;
+else decid_ct+1;
+if last.presid then output;
+run;
+
+*join first decedent w/total in sample, and delete later decedents;
+proc sql;
+create table outtable.letters_sample_mme as
+select * from
+(select t.*, l.decid_ct from total_mme t
+left join
+outtable.pres_dec_first l
+on t.presid = l.presid
+and t.decid = l.decid)
+where decid_ct ne .;
+
+*counts with removed decedents;
+proc sql;
+title "Total Rxs, prescribers, and decedents in study period for final file (w/out dupicate decedents)";
+select count(*) as ct_rx, count(distinct presid) as ct_pres, count(distinct decid) as ct_dec, is_let from
+outtable.letters_sample_mme
+where period ne .
+group by is_let;
+quit;       
+
+*export final smaple as STATA file;
+proc export
+data = outtable.letters_sample_mme
+outfile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/letters_sample_mme.dta"
+replace;
+run;
+  
+***************************************get letter assignment for removed decedents, and confirm first decedents for other prescribers not removed****;
+*tx assignment for decedents and prescribers with no opioid rx for consort diagram;
+*make two tables: 1) all decedents, 2) first decedent;
+%macro dec(t1, t2, vname);
+proc sql;
+create table &t2 as
+select distinct presid, newclusterid_st, letterid as &vname, is_let from &t1
+where period ne .
+order by presid, letterid;
+quit;
+%mend dec;
+%dec (total_mme, temp_total, all_dts);
+%dec (outtable.letters_sample_mme, temp_letter, first_dt);
+
+*join tables will all prescribers and only those with rx in study;
+proc sql;
+create table first_decid as
+select t.presid, t.is_let, t.newclusterid_st as all_decid,
+l.newclusterid_st as first_decid, t.all_dts, l.first_dt from
+temp_total t
+left join
+temp_letter l
+on t.presid  = l.presid
+order by presid, all_dts;
+Quit;
+    
+*no. of total decedents at beginning vs. after;
+proc sql;
+title "Check that count all decedents vs. first decedent and total prescribers";
+select count(distinct all_decid) as ct_dec, count(distinct first_decid) as ct_first_dec, count(distinct presid) as ct_pres from first_decid;
+quit;
+ 
+data first_decid;
+set first_decid;
+if first_decid ne all_decid then first_decid = " ";
+if first_dt ne all_dts then first_dt = .;
+run;
+
+*print first vs. all decedents table;
+proc sort data = first_decid;
+by presid all_dts;
+run;
+
+proc print data = first_decid;
+title "Decedent IDs and dates per prescriber";
+run;
+
+*number of decedents overall and by letter type;
+proc sql;
+create table check as
+select count(presid) as ct, is_let, ct as decid_no from 
+(
+select count(all_decid) as ct, presid, is_let from first_decid
+group by presid, is_let
+)
+group by is_let, decid_no;
+quit;
+
+proc print data = check;
+title "No. of per-clinician decedents by letter group";
+run;
+
+*collapse 1 + 2 decedents for chi-square;
+data check;
+set check;
+if decid_no = 3 then dec_no = 2;
+else dec_no = decid_no;
+run;
+
+*collapse prescribers with 2 and 3 decedents;
+proc sql;
+create table check_v2 as
+select is_let, dec_no, sum(ct) as ct from check 
+group by is_let, dec_no
+order by is_let, dec_no;
+quit;
+
+proc freq data = check_v2;
+weight ct;
+table is_let*dec_no/chisq;
+Title "Testing whether no. of decedents differs by letter";
+run;
+
+*removed decedents;
+proc sql;
+create table first_decid_rmvd as
+select * from first_decid where all_decid in
+(select all_decid from first_decid
+where first_decid = " ")
+order by all_decid, all_dts;
+quit;
+        
+*table w/decedent ID and letter assignment where decedent removed because never first decedent for other provider;
+proc sql;
+create table first_decid_rmvd_grp_mme as
+select * from
+(
+select count(*) as ct, all_decid, is_let from
+(
+select distinct all_decid, first_decid, is_let from first_decid_rmvd
+)
+group by all_decid
+)
+where ct = 1;
+quit;
+        
+*prescribers per-decedent, and decedents per-prescriber;
+proc sql;
+title "Summary stats. no. prescribers per decedent";
+select min(ct) as min_pres, max(ct) as max_pres, avg(ct) as avg, std(ct) as sd from 
+(
+select count(unique presid) as ct, decid from outtable.letters_sample_mme
+group by decid
+);
+quit;
+
+*summary stats for no. decedents per prescriber;
+proc sql;
+title "Summary stats. no. decedents per prescriber";
+select min(decid_ct) as min_dec, max(decid_ct) as max_dec, avg(decid_ct) as avg, std(decid_ct) as sd from outtable.letters_sample_mme;
+
+*print removed decedent id and letter ids;
+proc print data = first_decid_rmvd_grp_mme;
+Title "Removed decedents and letter assignment";
+run;
+
+*no. of removed subsequent decedents in each study arm;
+proc sql;
+title "No. removed subsequent decedents in each study arm";
+select count(*) as ct, is_let from first_decid_rmvd_grp_mme
+group by is_let;
+quit;
+
+*Total number of opioid Rxs during study period;
+proc sql;
+Title "Total Rxs in study period";
+select count(*) as ct_Rxs from outtable.letters_sample_mme
+where period ne .;
+quit;
+      
+*export removed decedent ID and letter assignment ;
+proc export data = work.first_decid_rmvd_grp_mme
+outfile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/decid_rmvd_mme.csv"
+replace;
+run;
+ods pdf close;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
