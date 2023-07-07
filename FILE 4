@@ -1,13 +1,23 @@
-ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2.xlsx";
+/***************************************************************************************************************************
+*FILE GOALS                                                                                                                *
+*****1. COUNTS AND CHI-SQUARES FOR PRESCRIBER CHARACTERISTICS FOR TABLE 2                                                  *
+*ES JULY 7, 2023                                                                                                           *
+****************************************************************************************************************************/
 
+*filepath to output;
+ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2_v2.xlsx";
+
+*libname;
 libname table "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
 
+*import data;
 proc import out = temp
 datafile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/la_letters_prescriber_demos.xlsx"
 dbms = xlsx;
 getnames = yes;
 run;
 
+*categorize demos;
 data temp2;
 length ethn $ 32. length spec $ 32.;
 set temp;
@@ -41,18 +51,11 @@ else if type = 'PA' then presc_type = 'PA';
 else if type = 'DO' then presc_type = 'DO';
 else presc_type = 'Other';
 
+*voided;
 where Prescriber_ID ne 'P019' and Prescriber_ID ne 'P476';
 run;
 
-/*proc sort data = temp2;
-by letter;
-run;
-
-proc freq data = temp2;
-table type presc_type primary_specialty spec gender cultural_background ethn/missing;
-by letter;
-run;*/
-
+*county data (from ME's computer);
 data county;
 input letter no county $;
 cards;
@@ -65,13 +68,14 @@ cards;
 ;
 run;
 
+*chi-square test for county;
 proc freq data = county;
 tables county*letter/chisq;
 weight no;
 title "Chi-square prescriber county by letter";
 run;
 
-*check if proportions differ between study arms;
+*chi-square tests for all other characteristics that contain missing;
 %macro chk(v);
 proc freq data = temp2;
 table letter*&v/missing chisq;
