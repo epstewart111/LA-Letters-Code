@@ -75,7 +75,7 @@ gen wmme_adj = perc_chng*wmme_total
 gen diff = wmme_adj - wmme_total
 save $data/est_mme, replace
 
-putexcel set $output/results_mme_v2.xlsx, sheet(table3) modify
+putexcel set $output/results_mme.xlsx, sheet(table3) modify
 foreach var in wmme_total wmme_adj diff {
 
 *95% CIs
@@ -199,7 +199,7 @@ putexcel I1 = matrix(total_ct), names nformat(number_d4)
 putexcel J1:K1 I2:I3, bold
 
 *output to excel 
-putexcel set $output/results_mme_v2.xlsx, sheet(primary) modify
+putexcel set $output/results_mme.xlsx, sheet(primary) modify
 
 *new patients
 use $data/analytic_weekly_mme, clear
@@ -255,7 +255,7 @@ putexcel A2 = matrix(fifty_dico') I2 = matrix(ninety_dico'), names nformat(numbe
 putexcel A3:A8 B2:G2 I3:I8 J2:O2, bold
 
 *excel sheet for post-hoc analyses
-putexcel set $output/results_mme_v2.xlsx, sheet(posthoc) modify
+putexcel set $output/results_mme.xlsx, sheet(posthoc) modify
 
 *no. of decedents/prov. by dec. category 
 egen tag = tag(presid decid_cat decid_ct)
