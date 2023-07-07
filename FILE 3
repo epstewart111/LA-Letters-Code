@@ -1,0 +1,187 @@
+/************************************************************************************************************************
+*FILE GOALS                                                                                                             *
+*****1. CREATE DECEDENT CHARACTERISTICS TABLE 1                                                                         *
+*ES JULY 7, 2023                                                                                                        *
+*************************************************************************************************************************/ 
+ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Table1_v2.xlsx";
+
+*file directory;
+libname savepath "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/";
+
+*format for table 1;
+proc format;
+value $sexf 'F'= 'Female' 
+'M' = 'Male'
+'Miss' ='Missing';
+value $deathf 'arx_only' = 'Prescription'
+'billicit_only' = "Illicit"
+'cillicit_rx' = 'Prescription and illicit'
+'drx_alc' = 'Prescription and alcohol'
+'eillicit_alc' = 'Illicit and alcohol'
+'fillicit_rx_alc' = 'Prescription, illicit and alcohol'
+'gotc_rx' = 'Prescription and OTC'
+'hotc_alc_rx' = 'Prescription, alcohol, and OTC'
+'imissing' = 'Missing';
+value $racef 'zMissing' = 'Missing'
+'Hispani' = 'Hispanic'
+'Asian' = 'Asian/Pacific Islander';
+value $agef 'age' = 'Age';
+value $characteristicf 
+'F'= 'Female' 
+'M' = 'Male'
+'Miss' = 'Missing'
+'Asian' = 'Asian/Pacific Islander'
+'arx_only' = 'Prescription'
+'billicit_only' = "Illicit"
+'cillicit_rx' = 'Prescription and illicit'
+'drx_alc' = 'Prescription and alcohol'
+'eillicit_alc' = 'Illicit and alcohol'
+'fillicit_rx_alc' = 'Prescription, illicit and alcohol'
+'gotc_rx' = 'Prescription and OTC'
+'hotc_alc_rx' = 'Prescription, alcohol, and OTC'
+'imissing' = 'Missing'
+'zMissing' = 'Missing'
+'Hispani' = 'Hispanic'
+'age' = 'Age' ;
+run;
+
+*import data. each demographic variable is on different xlsx sheet;
+%macro imp(name,title);
+proc import datafile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/Table1.xlsx"
+dbms = xlsx
+out = &name;
+sheet = "&name";
+run;
+
+*Recode variables;
+data &name;
+length Characteristic $ 60.;
+set &name;
+%if &name = age %then %do;
+drop MEAN STD N Letter Characteristic;
+%end;
+  
+%if &name = race %then %do;
+if race = "" or race = "Unknown" then Characteristic = 'zMissing';
+else if race = "Black" then Characteristic = "Black";
+else if race = "Asian" then Characteristic = "Asian";
+else if ethnicity = "Hispanic/LA" then Characteristic = "Hispanic";
+else Characteristic = "White";
+drop race ethnicity;
+%end;
+run;
+%mend imp;
+%imp(age, Age);
+%imp(gender, Bio. Sex);
+%imp(death, Cause of Death);
+%imp(race, Race);
+
+*chi-square tests for sex, cause of death, and race;
+%macro chi(data,form);
+proc freq data = &data;
+table Characteristic*letter/missing chisq;
+weight ct;
+title "&data by letter";
+format Characteristic &form..;
+run;
+%mend chi;
+%chi(death, $deathf);
+%chi(gender, $sexf);
+%chi(race, $racef);
+
+*difference in mean age;
+proc ttest data = age test = diff sides = 2;
+class Letter_1;
+var Age;
+title "T-test age by letter";
+run;
+
+*consolidate race categories;
+proc sql;
+create table race_v2 as
+select sum(ct) as ct, letter, Characteristic from race
+group by letter, Characteristic;
+quit;
+
+*reformat age;
+proc transpose data = age out = age_trans;
+id letter_1 _STAT_;
+where _STAT_ ne 'N';
+run;
+
+*round and add parentheses for sd;
+data age_trans;
+retain Characteristic Comparator Standard;
+set age_trans (rename = (_LABEL_ = Characteristic));
+cmean = round(cmean,.01);
+emean = round(emean,.01);
+cstd = round(cstd,.01);
+estd = round(estd,.01);
+Standard = cat(cmean, ' (', cstd, ')');
+Comparator = cat(emean, ' (', estd, ')');
+keep Characteristic Comparator Standard;
+format Characteristic $agef.;
+run;
+
+*transpose data to append for table;
+%macro trans(dat, form);
+proc sort data = &dat;
+by Characteristic;
+run;
+
+*transpose data to wide;
+proc transpose data = &dat out = &dat._trans (drop =  _NAME_);
+id letter;
+by Characteristic;
+run;
+
+*get totals for each group;
+proc sql;
+create table &dat._temp as
+select Characteristic, 
+E, 
+C, 
+sum(E) as E_total, 
+sum(C) as C_total, 
+E/sum(E) as E_perc, 
+C/sum(C) as C_perc from &dat._trans;
+quit;
+
+*cosmetic changes;
+data &dat._trans_v2;
+length E_no_perc $ 32. C_no_perc $ 32. E 8. C 8. Characteristic $ 32.;
+retain Characteristic E C;
+set &dat._temp;
+	
+*categories with missing set to 0;
+if E = . then E = 0;
+if C = . then C = 0;
+if E_perc = . then E_perc = 0;
+if C_perc = . then C_perc = 0;
+	
+*round percentage;
+E_perc = (round(E_perc, .0001))*100;
+C_perc = (round(C_perc, .0001))*100;
+perc = '%';
+E_no_perc = cat('(', E_perc, perc, ')');
+C_no_perc = cat('(', C_perc, perc, ')');
+Comparator = catx('', E, E_no_perc);
+Standard = catx('', C, C_no_perc);
+keep Characteristic Comparator Standard;
+format Characteristic &form..;
+run;
+%mend trans;
+%trans(death, $deathf);
+%trans(gender, $sexf);
+%trans(race_v2, $racef);
+
+data total;
+set age_trans gender_trans_v2 race_v2_trans_v2 death_trans_v2;
+format Characteristic $characteristicf.;
+run;
+
+proc print data = total;
+run;
+ods excel close;
+
+
