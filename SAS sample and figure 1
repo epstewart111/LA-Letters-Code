@@ -1,20 +1,20 @@
 /*********************************************************************************************************************************************
 *FILE GOALS                                                                                                                                  *
-*****1. IMPORT DATA, MERGE WITH CDC, AND WHERE MISSING NDC, PRODUCT NAME CW TO GET DRUG STRENGTH                                             *
-*****2. GET PER-RX, PER-CLINICIAN MME                                                                                                        *
+*****1. IMPORT DATA, MERGE WITH CDC, AND WHERE MISSING, PRODUCT NAME CW TO GET DRUG STRENGTH                                                 *
+*****2. GET MME AND VME PER-PRESCRIBER, PER-RX                                                                                               *
 *****3. GET TOTAL NO. RXS AND SAMPLE COUNTS FOR FIGURE ONE FLOW DIAGRAM                                                                      *
 *ES JULY 7, 2023                                                                                                                             *
 **********************************************************************************************************************************************/
 
 *output summary stats. for fig. 1;
-ods pdf file = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Sample_mme.pdf";
+ods pdf file = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/sample_mme_v2.pdf";
 
 *filepath;
 libname outtable "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
 
 *import data-proc import doesn't correctly recognize variable types;
 *five excel spreadsheets for two separate CURES files;
-%macro imp (file, file2);
+/*%macro imp (file, file2);
   %do i = 1 %to 5;
          data &file._temp&i;
             %let _EFIERR_ = 0; 
@@ -94,7 +94,24 @@ run;
 %mend imp;
 %imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/opioid_ndcs.xlsx, outtable.opioid_ndc, Sheet1);
 %imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/opioid_conversion.xlsx, outtable.opioid_conversion, Sheet1);
-%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/product_name_cw.xlsx, outtable.product_name_cw, Sheet1);
+%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/product_name_cw.xlsx, outtable.product_name_cw, Sheet1);*/
+
+*counts  study period;
+proc sql;
+title 'Total Rxs, prescribers and decedents';
+select count(*) as ct_rx, count(distinct presid) as ct_pres, count(distinct newclusterid) as ct_dec, is_let from
+outtable.study_all
+group by is_let;
+quit;
+
+*counts  study period;
+proc sql;
+title 'Total Rxs, prescribers and decedents during study period';
+select count(*) as ct_rx, count(distinct presid) as ct_pres, count(distinct newclusterid) as ct_dec, is_let from
+outtable.study_all
+where period ne .
+group by is_let;
+quit;
 
 *convert conversion_factor to numeric;
 data outtable.opioid_conversion;
@@ -214,14 +231,6 @@ set temp2;
 cw_id = 'NDC';
 where NDC ne '' and drug ne "Buprenorphine";
 run;
-
-*check data with missing NDCs;
-proc sql;
-title "check crosswalk";
-select count(*) as ct, product_name, strength_new, strength_per_unit, drug from ndc_complete_miss
-group by product_name, strength_new, strength_per_unit, drug
-order by product_name, strength_new;
-quit;
 
 *appends Rxs with missing and non-missing NDCs;
 proc sql;
@@ -378,7 +387,7 @@ Quit;
     
 *no. of total decedents at beginning vs. after;
 proc sql;
-title "Check that count all decedents vs. first decedent and total prescribers";
+title "Total no. of decedents, first decedents, and prescribers";
 select count(distinct all_decid) as ct_dec, count(distinct first_decid) as ct_first_dec, count(distinct presid) as ct_pres from first_decid;
 quit;
  
