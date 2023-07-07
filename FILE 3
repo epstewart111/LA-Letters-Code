@@ -3,7 +3,7 @@
 *****1. CREATE DECEDENT CHARACTERISTICS TABLE 1                                                                         *
 *ES JULY 7, 2023                                                                                                        *
 *************************************************************************************************************************/ 
-ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Table1_v2.xlsx";
+ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Table1.xlsx";
 
 *file directory;
 libname savepath "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/";
