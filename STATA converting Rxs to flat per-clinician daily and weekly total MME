@@ -48,12 +48,12 @@ bys patid dayssince: gen n_visit_firstday = _n
 replace new_pat = 0 if n_visit_firstday > 1
 
 *high dose prescriptions 
-gen ninetymore = `var' > 90
-gen fiftymore = `var' >= 50
+gen ninetymore = mme > 90
+gen fiftymore = mme >= 50
 sort dayssince
 
 *collapse data to physician+day level
-collapse (max) n_orders = n (sum) d`var'_total = `var' (first) decid (first) decid_ct (first) is_let (sum) n_new_pat = new_pat (sum) n_ninetymore = ninetymore (sum) n_fiftymore = fiftymore (sum) `var'_per_pres (mean) dayssupply_mean = dayssupply (sum) dayssupply_total = dayssupply, by(presid dayssince)
+collapse (max) n_orders = n (sum) dmme_total = mme (first) decid (first) decid_ct (first) is_let (sum) n_new_pat = new_pat (sum) n_ninetymore = ninetymore (sum) n_fiftymore = fiftymore (sum) mme_per_pres (mean) dayssupply_mean = dayssupply (sum) dayssupply_total = dayssupply, by(presid dayssince)
 
 *save file
 save $data/collapsed.dta, replace
@@ -78,7 +78,7 @@ duplicates drop
 
 * merge in analytical data and fill in 0
 merge 1:1 presid dayssince using $data/collapsed, keep(master match) nogen
-foreach name in n_orders d`var'_total n_new_pat `var'_per_pres n_ninetymore n_fiftymore dayssupply_mean dayssupply_total {
+foreach name in n_orders dmme_total n_new_pat mme_per_pres n_ninetymore n_fiftymore dayssupply_mean dayssupply_total {
 	replace `name' = 0 if mi(`name')
 }
 
@@ -103,9 +103,9 @@ gen start = inrange(dayssince, 0, 119)
 gen end = dayssince > 119
 
 *remove prescribers with no rx who are not in original data 
-bys presid: egen max_d`var'_total = max(d`var'_total)
-drop if max_d`var'_total==0
-drop max_d`var'_total
+bys presid: egen max_dmme_total = max(dmme_total)
+drop if max_dmme_total==0
+drop max_dmme_total
 
 *washout period
 drop if inrange(dayssince, 0, 30)
@@ -128,11 +128,11 @@ tab presid
 mdesc
 
 *log transformation:
-gen log_total=log(d`var'_total)
-replace log_total=0 if d`var'_total==0 | log_total < 0 
+gen log_total=log(dmme_total)
+replace log_total=0 if dmme_total==0 | log_total < 0 
 
 *save daily file
-save $data/analytic_daily_`var', replace
+save $data/analytic_daily_mme, replace
 
 *aggregate dmme by week 
 gen week = mod(dayssince, 7) == 0 if dayssince < 0
@@ -142,8 +142,8 @@ by presid: gen week_id = sum(week)
 drop week 
 
 *collapse data to physician+week level and save
-collapse (sum) n_orders (sum) w`var'_total = d`var'_total (first) decid (first) decid_ct (first) is_let (sum) n_new_pat (sum) n_ninetymore (sum) n_fiftymore ///
-(sum) w`var'_total_pills = `var'_per_pres (first) start_day = dayssince (last) end_day = dayssince (mean) dayssupply_mean = dayssupply_total, by(presid week_id)
+collapse (sum) n_orders (sum) wmme_total = dmme_total (first) decid (first) decid_ct (first) is_let (sum) n_new_pat (sum) n_ninetymore (sum) n_fiftymore ///
+(sum) wmme_total_pills = mme_per_pres (first) start_day = dayssince (last) end_day = dayssince (mean) dayssupply_mean = dayssupply_total, by(presid week_id)
 
 *post_intervention
 gen post = week_id > 52
@@ -153,10 +153,10 @@ gen start = inrange(week_id, 53, 70)
 gen end = week_id > 70
 
 *log transformation for weekly data
-gen log_total=log(w`var'_total)
-gen log_pills = log(w`var'_total_pills)
-replace log_total = 0 if w`var'_total == 0 | log_total < 0
-replace log_pills = 0 if w`var'_total_pills == 0 | log_pills < 0
+gen log_total=log(wmme_total)
+gen log_pills = log(wmme_total_pills)
+replace log_total = 0 if wmme_total == 0 | log_total < 0
+replace log_pills = 0 if wmme_total_pills == 0 | log_pills < 0
 
 *providers with > 1 decedent
 gen decid_cat = decid_ct > 1
@@ -175,9 +175,8 @@ gen ninety_di = n_ninetymore > 0
 tab ninety_di
 
 *save weekly file 
-save $data/analytic_weekly_`var', replace
+save $data/analytic_weekly_mme, replace
 describe
-
 
 
 
