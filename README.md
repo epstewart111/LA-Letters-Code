@@ -23,11 +23,9 @@
          2. Three-way interaction tesing whether letter effect post-intervention was stronger for prescribers who had muliple decedents and received multiple comparator letters
      
     SOFTWARE
-
     SAS version 9.4, STATA software version 16, and R version 3.6.0
 
     LICENSE
-
     Schaeffer Center for Health Policy and Economics, University Southern California
 
     USAGE 
