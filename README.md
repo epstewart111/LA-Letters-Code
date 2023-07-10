@@ -25,12 +25,15 @@ ANALYSES
   2. Three-way interaction tesing whether letter effect post-intervention was stronger for prescribers who had muliple decedents and received multiple comparator letters
      
 SOFTWARE
+
 SAS version 9.4, STATA software version 16, and R version 3.6.0
 
 LICENSE
+
 Schaeffer Center for Health Policy and Economics, University Southern California
 
 USAGE 
+
   FILE 1 (SAS)
   1. Imports CURES Rx data 
   2. Obtains drug strength, pill qty, and conversion factor per Rx
@@ -77,4 +80,5 @@ USAGE
   2. Uses ggplot to create Figure 2
 
 CONTACT
+
 For questions regarding code or data access email Emily Stewart, epstewar@usc.edu, and corresponding author Jason Doctor, jdoctor@usc.edu, respectively 
