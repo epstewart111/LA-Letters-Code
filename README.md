@@ -5,9 +5,11 @@ DATA (collected from October 2017 to May 2021)
  1. Decedent data was obtained from the LA Medical Examiner-Coroner
  2. Prescriber demographics and prescriptions were obtained from the Controlled Substance Utilization Review and Evaluation System (CURES)
  3. Conversion factors, drug names and strengths, and drug NDCs were obtained from the Centers for Disease Control and Prevention 
-    a. Opioid National Drug Code and Oral MME Conversion File Update. https://www.cdc.gov/opioids/data-resources/index.html (2023)
+
+     a. Opioid National Drug Code and Oral MME Conversion File Update. https://www.cdc.gov/opioids/data-resources/index.html (2023)
 
 ANALYSES 
+  
   PRIMARY
   1.  Multi-level (mixed effects) left censored regression
   2.  Estimates used to derive adjusted MME to asssess whether difference in total mean pre- and post-intervention average daily MME differed between prescibers
