@@ -15,7 +15,6 @@ log using "$log/Logs/results_`dt'.log"
 global data $dua/SD-CHCF/epstewar/LA_letters/Data
 global boot $dua/SD-CHCF/epstewar/LA_letters/Bootstrap
 global output $dua/SD-CHCF/epstewar/LA_letters/Results
-global graph $dua/SD-CHCF/epstewar/LA_letters/Graphs
 
 *load data
 use $data/analytic_weekly_mme, clear
