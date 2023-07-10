@@ -2,6 +2,7 @@ PURPOSE
 The LA-Letters-Code repository provides the code for the manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in #### 
 
 DATA (collected from October 2017 to May 2021)
+
     1. Decedent data was obtained from the LA Medical Examiner-Coroner
     2. Prescriber demographics and prescriptions were obtained from the Controlled Substance Utilization Review and Evaluation System (CURES)
     3. Conversion factors, drug names and strengths, and drug NDCs were obtained from the Centers for Disease Control and Prevention 
