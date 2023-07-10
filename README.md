@@ -1,5 +1,6 @@
 PURPOSE
-The LA-Letters-Code repository provides the code for the manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in #### 
+
+    The LA-Letters-Code repository provides the code for the manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in #### 
 
 DATA (collected from October 2017 to May 2021)
 
