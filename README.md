@@ -20,7 +20,7 @@
      
          POST-HOC
          1. Equality of coefficients testing whether study start coefficient (weeks 4-22) differed from study end (weeks 23-52)
-         2. Three-way interaction tesing whether letter effect post-intervention was stronger for prescribers who had muliple decedents and received multiple comparator              letters
+         2. Three-way interaction tesing whether letter effect post-intervention was stronger for prescribers who had muliple decedents and received multiple comparator letters
      
     SOFTWARE
 
@@ -73,10 +73,8 @@
             6. Converts results to matrix and exports
 
         FILE 7 (R) 
-        
             1. Creates dataframe with adjusted post-intervention mean MME by each letter and decedent group
             2. Uses ggplot to create Figure 2
 
     CONTACT
-
     For questions regarding code or data access email Emily Stewart, epstewar@usc.edu, and corresponding author Jason Doctor, jdoctor@usc.edu, respectively 
