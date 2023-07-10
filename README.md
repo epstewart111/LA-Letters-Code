@@ -1,17 +1,13 @@
     PURPOSE
-
-        The LA-Letters-Code repository provides the code for the manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in #### 
+    The LA-Letters-Code repository provides the code for the manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in #### 
 
     DATA (collected from October 2017 to May 2021)
-
         1. Decedent data was obtained from the LA Medical Examiner-Coroner
         2. Prescriber demographics and prescriptions were obtained from the Controlled Substance Utilization Review and Evaluation System (CURES)
         3. Conversion factors, drug names and strengths, and drug NDCs were obtained from the Centers for Disease Control and Prevention 
-
            a. Opioid National Drug Code and Oral MME Conversion File Update. https://www.cdc.gov/opioids/data-resources/index.html (2023)
 
     ANALYSES 
-  
          PRIMARY
          1.  Multi-level (mixed effects) left censored regression
          2.  Estimates used to derive adjusted MME to asssess whether difference in total mean pre- and post-intervention average daily MME differed between prescibers
@@ -35,8 +31,6 @@
     Schaeffer Center for Health Policy and Economics, University Southern California
 
     USAGE 
-
-
         FILE 1 (SAS)
             1. Imports CURES Rx data 
             2. Obtains drug strength, pill qty, and conversion factor per Rx
@@ -46,7 +40,6 @@
             6. Creates cleaned dataset called "letters_sample_mme"
 
         FILE 2 (STATA)
-
             1. Imports letters_sample_mme
             2. Creates flat file which has total, daily MME per-prescriber, called "analytic_daily_mme"
                a. Unused because of model convergence issues
@@ -54,28 +47,24 @@
             4. Adds variables for post-intervention, log MME, no. of decedents, study start, study_end, no. of new patients, and high dose Rxs (50 and 90 MME)
 
         FILE 3 (SAS)
-
             1. Imports decedent data
             2. Uses proc sql, proc ttest, and proc freq to get counts (%) and mean (sd) between study arms for decedent Table 1
 
         FILE 4 (SAS)
-          
             1. Imports presciber data
             2. Uses proc sql and proc freq to get counts (%) between study arms for prescriber Table 2
 
         FILE 5 (STATA)
-          
-           1. Imports analytic_weekly_mme
-           2. Metobit testing interaction between intervention and letter effect (is_let*post)
-           3. Adjusts post-intervention, per-prescriber, weekly MME for each letter group
-           4. Calculates pre-intervention means for each letter group and trims by 9
-           5. Bootstraps 95% confidence intervals for difference in pre- to post-intervention effects, and difference-in-difference between study arms
-           6. Melogits testing interaction between intervention and letter effect (is_let*post) for high-dose Rxs, and new patient starts
-           7. Lincom tests difference in study start and study end coefficients
-           8. Converts results to matrices, and exports
+            1. Imports analytic_weekly_mme
+            2. Metobit testing interaction between intervention and letter effect (is_let*post)
+            3. Adjusts post-intervention, per-prescriber, weekly MME for each letter group
+            4. Calculates pre-intervention means for each letter group and trims by 9
+            5. Bootstraps 95% confidence intervals for difference in pre- to post-intervention effects, and difference-in-difference between study arms
+            6. Melogits testing interaction between intervention and letter effect (is_let*post) for high-dose Rxs, and new patient starts
+            7. Lincom tests difference in study start and study end coefficients
+            8. Converts results to matrices, and exports
 
         FILE 6 (STATA)
-        
             1. Imports analytic_weekly_mme
             2. Metobit testing interaction between intervention, letter effect, and no. of decedents (is_let*post*decid_cat)
             3. Adjusts post-intervention, per-prescriber, weekly MME for each letter and decedent group
