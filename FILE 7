@@ -1,6 +1,7 @@
 ##########################################################################################################
-##graph which shows post effect at different levels of is_let and decid_cat (no. of decedents 1 vs. > 1)
-##ES October 14, 2022
+#FILE GOALS:                                                                                             #
+####1. FIGURE WHICH SHOWS ADJUSTED POST-INTERVENTION MEANS FOR >1 LETTER AND 1 LETTER                    #
+##ES JULY 10, 2023                                                                                       #
 ##########################################################################################################
 
 #libraries
@@ -20,20 +21,10 @@ dec <- c('>1 death', '>1 death', '1 death', '1 death')
 opioids <- data.frame(post, lcl, ucl, Letter, dec)
 opioids
 
-#benzo data (Table 4 in results spreadsheet on drive) 
-post <- c(1278.43, 405.22, 39.25, 31.78)
-lcl <- c(1193.56, 368.11, 38.13, 30.76)
-ucl <- c(1363.29, 442.34, 40.36, 32.81)
-Letter <- c('Standard', 'Comparator', 'Standard', 'Comparator')
-dec <- c('>1 death', '>1 death', '1 death', '1 death')
-benzos <- data.frame(post, lcl, ucl, Letter, dec)
-benzos
-
 #Figure 1
-graph <- function(df) {
-ggplot(df, aes(fill = Letter, x = dec, y = post)) + geom_bar(stat = "Identity", position = position_dodge()) +
+ggplot(opioids, aes(fill = Letter, x = dec, y = post)) + geom_bar(stat = "Identity", position = position_dodge()) +
 geom_errorbar(aes(x = dec, ymin = lcl, ymax = ucl), width = 0.4, position = position_dodge(0.9)) +
-ylab("Adjusted Total Weekly Mean VME Post-Intervention") +
+ylab("Adjusted Total Weekly Mean MME Post-Intervention") +
 xlab("") + 
 theme_bw() + 
 theme(axis.text=element_text(size = 13))  +
@@ -42,5 +33,4 @@ scale_fill_manual(values=c("darkblue", "skyblue"))
 
 #save plot
 ggsave("/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Graphs/Fig1.jpg")
-}
-graph(benzos)
+
