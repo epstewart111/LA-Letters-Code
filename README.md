@@ -10,10 +10,10 @@ DATA (collected from October 2017 to May 2021)
 
 ANALYSES 
   
-  PRIMARY
-  1.  Multi-level (mixed effects) left censored regression
-  2.  Estimates used to derive adjusted MME to asssess whether difference in total mean pre- and post-intervention average daily MME differed between prescibers
-  randomized to a standard and comparator version of a letter
+     PRIMARY
+     1.  Multi-level (mixed effects) left censored regression
+     2.  Estimates used to derive adjusted MME to asssess whether difference in total mean pre- and post-intervention average daily MME differed between prescibers
+     randomized to a standard and comparator version of a letter
 
   SECONDARY
   1. Rxs => 50 MME
