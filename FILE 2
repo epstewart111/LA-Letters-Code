@@ -15,7 +15,7 @@ log using "$log/Logs/datasetup_`dt'.log"
 global data $dua/SD-CHCF/epstewar/LA_letters/Data
 
 *get flat file for morphine milligram equivalents or diazepam milligram equivalents (valium milligram equivalents)
-foreach var in mme /*vme*/ {
+foreach var in mme vme {
 	
 *import file 
 use $data/letters_sample_`var', clear
