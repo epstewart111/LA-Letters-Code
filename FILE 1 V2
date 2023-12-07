@@ -1,17 +1,21 @@
-***************************************************************************************************************************************;
-**Goals:;
-  *1. Import and append data;
-  *2. Merge study data with CDC NDC and product_name crosswalk;
-  *3. Calculate MMEs;
-*3 ES October 29, 2021;
-**************************************************************************************************************************************;
+/*********************************************************************************************************************************************
+*FILE GOALS                                                                                                                                  *
+*****1. IMPORT DATA, MERGE WITH CDC, AND WHERE MISSING, PRODUCT NAME CW TO GET DRUG STRENGTH                                                 *
+*****2. GET MME AND VME PER-PRESCRIBER, PER-RX                                                                                               *
+*****3. GET TOTAL NO. RXS AND SAMPLE COUNTS FOR FIGURE ONE FLOW DIAGRAM                                                                      *
+*ES JULY 7, 2023                                                                                                                             *
+**********************************************************************************************************************************************/
 
+*define outcome, mme for opioids, dme for benzos;
 %let name = mme;
+
+*output results for consort diagram to PDF;
 ods pdf file = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Sample_&name..pdf";
+
 *filepath;
 libname outtable "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
 
-/*%macro imp (file, file2);
+%macro imp (file, file2);
   %do i = 1 %to 5;
          data &file._temp&i;
             %let _EFIERR_ = 0; 
@@ -58,9 +62,10 @@ libname outtable "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/L
            run;
         %end;
 
+*append data;
 data &file2;
-	set
-	%do i = 1 %to 5;
+set
+%do i = 1 %to 5;
  &file._temp&i
 %end;
 ;
@@ -69,19 +74,14 @@ run;
 %imp (Report_part1, outtable.partone_all);
 %imp (Report_part2, outtable.parttwo_all);
 
-*combining all data;
+*add study period, and remove prefix;
 data outtable.study_all;
 set outtable.partone_all outtable.parttwo_all;
 if -365 <= dayssince <= 0 then period = 0;
 else if 31 <= dayssince <= 365 then period = 1;
 newclusterid_st = strip(newclusterid);
-run;*/
+run;
 
-*no. prescribers = 541
-************In MS database: 543, P019 VOID (sent standard and comparator letter) and P476 VOID (no record of decedent (P476));
-*no. decedents = 236 
-***********In MS database: 238 in ROR table (D463 and D482 affilaited with voided P476). D022 has no opioid rx, but was included in randomization;
-*no. prescriptions = 9,551,768;
 *importing opioid NDCs, product name crosswalk and opioid conversion table;
 %macro imp (file, file2, sheet);
 proc import datafile = "&file" out = &file2
@@ -101,7 +101,7 @@ set outtable.opioid_conversion;
 Conversion_Factorn = input(Conversion_Factor, 8.);
 run;
 
-*Merge study data with CDC NDC crosswalk;
+*merge study data with CDC NDC crosswalk;
 proc sql;
 create table temp2 as
 select t.presid, t.patid, t.newclusterid, t.letterid, t.qty, t.dayssupply, t.strength, t.drugname, t.is_let, t.dayssince, t.period, 
@@ -112,7 +112,7 @@ outtable.opioid_ndc l
 on t.NDC = l.NDC;
 quit;
 
-*counts  study period;
+*counts study period;
 proc sql;
 title 'Total Rxs, prescribers and decedents during study period';
 select count(*) as ct_rx, count(distinct presid) as ct_pres, count(distinct newclusterid) as ct_dec, is_let from
@@ -158,231 +158,228 @@ then do;
 dosen1 = dosen1*1000;
 end;
 
-keep presid patid newclusterid letterid qty dayssupply drugname NDC strength strength_new dosen1-dosen4 is_let dayssince period form i;
+keep presid patid newclusterid letterid qty dayssupply drugname NDC strength strength_new dosen1-dosen4 is_let dayssince period form;
 run;
 
 *check distinct strength-per-unit, edited strength w/out characters, and dose variables;
-/*proc sql;
+proc sql;
 create table check_temp as
 select distinct strength, strength_new, dosen1, dosen2, dosen3, dosen4 from ingredient_temp;
-quit;*/
+quit;
 
 *must strip/remove leading and trailing blanks to merge;
 data ingredient_temp;
-	set ingredient_temp;
-	drugname = strip(drugname);
+set ingredient_temp;
+drugname = strip(drugname);
 run;
 
 data outtable.product_name_cw;
-	set outtable.product_name_cw;
-	product_name = strip(product_name);
+set outtable.product_name_cw;
+product_name = strip(product_name);
 run;
 
 *selecting only distinct obs. from cw;
 proc sql;
-	create table cw_temp as
-	select distinct product_name, drug, strength as strength_per_unit from outtable.product_name_cw;
+create table cw_temp as
+select distinct product_name, drug, strength as strength_per_unit from outtable.product_name_cw;
 quit;
 
 *join study data and cross walk;
 *multiple merges to accomodate combo. drugs each w/different dose (e.g., dosen1, dosen2, etc.);
 proc sql;
 create table ndc_complete_miss as
-	(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
-  inner join 
-	cw_temp l
-	on t.drugname = l.product_name 
-	and t.dosen1 = l.strength_per_unit)
-	union all
-	(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
-	inner join 
-	cw_temp l
-	on t.drugname = l.product_name 
-	and t.dosen2 = l.strength_per_unit)
-	union all
-	(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
-	inner join 
-	cw_temp l
-	on t.drugname = l.product_name 
-	and t.dosen3 = l.strength_per_unit)
-	union all
-	(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
-	inner join 
-	cw_temp l
-	on t.drugname = l.product_name 
-	and t.dosen4 = l.strength_per_unit);
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen1 = l.strength_per_unit)
+union all
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen2 = l.strength_per_unit)
+union all
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen3 = l.strength_per_unit)
+union all
+(select t.*, l.product_name, l.drug, l.strength_per_unit from ingredient_temp t
+inner join 
+cw_temp l
+on t.drugname = l.product_name 
+and t.dosen4 = l.strength_per_unit);
 quit;
 
 *handcoding problem cases;
 data ndc_complete_miss;
-	set ndc_complete_miss;
+set ndc_complete_miss;
 		
-	*delete buprenorphine-don't use for conversions;
-	if drug = "Buprenorphine" then delete;
+*delete buprenorphine;
+if drug = "Buprenorphine" then delete;
 
-  cw_id = 'PRODUCT';
+cw_id = 'PRODUCT';
 run;
 
 *adding cw id to data with complete ndcs;
 data ndc_nonmiss;
-	set temp2;
-	cw_id = 'NDC';
-	where NDC ne '' and drug ne "Buprenorphine";
+set temp2;
+cw_id = 'NDC';
+where NDC ne '' and drug ne "Buprenorphine";
 run;
 
 *check crosswalk;
-/*proc sql;
-	title "check crosswalk";
-	select count(*) as ct, product_name, strength_new, strength_per_unit, drug from ndc_complete_miss
-	group by product_name, strength_new, strength_per_unit, drug
-	order by product_name, strength_new;
-quit;*/
+proc sql;
+title "check crosswalk";
+select count(*) as ct, product_name, strength_new, strength_per_unit, drug from ndc_complete_miss
+group by product_name, strength_new, strength_per_unit, drug
+order by product_name, strength_new;
+quit;
 
 **********************************************************************benzos**************************************************************;
 *apply benzo conversion factors;
 data outtable.benzo;
 set outtable.study_all;
-  *conversion factors - drugs categorization from https://www.benzo.org.uk/bzequiv.htm, use median when ranges are reported
-  *conversion factors updated MAR 31 to https://www.jmcp.org/doi/pdf/10.18553/jmcp.2022.28.1.58;
+*conversion factors - drugs categorization from https://www.benzo.org.uk/bzequiv.htm, use median when ranges are reported
+*conversion factors updated MAR 31 to https://www.jmcp.org/doi/pdf/10.18553/jmcp.2022.28.1.58;
 
-  *xanax;
-  if drugname in ('ALPRAZOLAM' 'ALPRAZOLAM INTENSOL' 'ALPRAZOLAM XR' 'XANAX' 'XANAX XR')
-  then convert=10;
+*xanax;
+if drugname in ('ALPRAZOLAM' 'ALPRAZOLAM INTENSOL' 'ALPRAZOLAM XR' 'XANAX' 'XANAX XR')
+then convert=10;
 
-  *ativan;
-  else if drugname in ('ATIVAN' 'LORAZEPAM' 'LORAZEPAM INTENSOL' 'LORAZEPAM NOVAPLUS') 
-  then convert=5;
+*ativan;
+else if drugname in ('ATIVAN' 'LORAZEPAM' 'LORAZEPAM INTENSOL' 'LORAZEPAM NOVAPLUS') 
+then convert=5;
 
-  *klonopin;
-  else if drugname in ('CLONAZEPAM' 'KLONOPIN' 'KLONOPIN WAFERS') 
-  then convert=10;
+*klonopin;
+else if drugname in ('CLONAZEPAM' 'KLONOPIN' 'KLONOPIN WAFERS') 
+then convert=10;
 
-  *clorazepate;
-  else if drugname in ('CLORAZEPATE DIPOTASSIUM' 'TRANXENE T-TAB') 
-  then convert=0.67;
+*clorazepate;
+else if drugname in ('CLORAZEPATE DIPOTASSIUM' 'TRANXENE T-TAB') 
+then convert=0.67;
 
-  *valium;
-  else if drugname in ('DIAZEPAM' 'DIAZEPAM INTENSOL' 'DIAZEPAM RECTAL DELIVERY SYSTEM' 'VALIUM' 'DIASTAT ACUDIAL' 'DIASTAT') 
-  then convert=1;
+*valium;
+else if drugname in ('DIAZEPAM' 'DIAZEPAM INTENSOL' 'DIAZEPAM RECTAL DELIVERY SYSTEM' 'VALIUM' 'DIASTAT ACUDIAL' 'DIASTAT') 
+then convert=1;
 
-  *estazolam;
-  else if drugname = 'ESTAZOLAM' then convert=7.5;
-  else if drugname in ('FLURAZEPAM HCL' 'FLURAZEPAM' 'PROSOM' 'DALMANE')
-  then convert=0.33;
+*estazolam;
+else if drugname = 'ESTAZOLAM' then convert=7.5;
+else if drugname in ('FLURAZEPAM HCL' 'FLURAZEPAM' 'PROSOM' 'DALMANE')
+then convert=0.33;
 
-  *triazolam;
-  else if drugname in ('HALCION' 'TRIAZOLAM') then convert=20;
+*triazolam;
+else if drugname in ('HALCION' 'TRIAZOLAM') then convert=20;
 
-  *oxazepam;
-  else if drugname in ('OXAZEPAM' 'SERAX') then convert=0.33;
+*oxazepam;
+else if drugname in ('OXAZEPAM' 'SERAX') then convert=0.33;
 
-  *temezepam;
-  else if drugname in ('RESTORIL' 'TEMAZEPAM') then convert=0.5;
+*temezepam;
+else if drugname in ('RESTORIL' 'TEMAZEPAM') then convert=0.5;
 
-  *chloridazepoxide;
-  else if drugname in ('CHLORDIAZEPOXIDE HCL' 'CHLORDIAZEPOXIDE HYDROCHLORIDE-CLID' 'CHLORDIAZEPOXIDE HYDROCHLORIDE'
-  'CHLORDIAZEPOXIDE HYDROCHLORIDE & CL' 'CHLORDIAZEPOXIDE HYDROCHLORIDE/CLID' 'CHLORDIAZEPOXIDE W/AMITRIPTYLINE'
-  'CHLORDIAZEPOXIDE AND AMITRIPTYLINE' 'LIBRIUM') then convert=0.4;
+*chloridazepoxide;
+else if drugname in ('CHLORDIAZEPOXIDE HCL' 'CHLORDIAZEPOXIDE HYDROCHLORIDE-CLID' 'CHLORDIAZEPOXIDE HYDROCHLORIDE'
+'CHLORDIAZEPOXIDE HYDROCHLORIDE & CL' 'CHLORDIAZEPOXIDE HYDROCHLORIDE/CLID' 'CHLORDIAZEPOXIDE W/AMITRIPTYLINE'
+'CHLORDIAZEPOXIDE AND AMITRIPTYLINE' 'LIBRIUM') then convert=0.4;
   
-  *remove letters and characters, except -;
-  strength_new = prxchange('s/((%|;)|(([a-z]{1,})?(\/)(\d)?\.?(\d)? ?)?[a-z]{1,})//i', -1, strength);
+*remove letters and characters, except -;
+strength_new = prxchange('s/((%|;)|(([a-z]{1,})?(\/)(\d)?\.?(\d)? ?)?[a-z]{1,})//i', -1, strength);
 
-  *remove non-benzos;
-  if convert = . then delete;
+*remove non-benzos;
+if convert = . then delete;
   
-  *drug strength accounting for combo chloridazepoxide;
-  if drugname = 'CHLORDIAZEPOXIDE AND AMITRIPTYLINE' then dosec = substr(strength_new, 5, 2);
-  else if drugname = 'CHLORDIAZEPOXIDE W/AMITRIPTYLINE' then dosec = substr(strength_new, 7, 1);
-  else if drugname in ('CHLORDIAZEPOXIDE HYDROCHLORIDE & CL' 'CHLORDIAZEPOXIDE HYDROCHLORIDE-CLID' 'CHLORDIAZEPOXIDE HYDROCHLORIDE/CLID') 
-  then dosec = substr(strength_new, 1, 1);
-  else dosec = strength_new;
+*drug strength accounting for combo chloridazepoxide;
+if drugname = 'CHLORDIAZEPOXIDE AND AMITRIPTYLINE' then dosec = substr(strength_new, 5, 2);
+else if drugname = 'CHLORDIAZEPOXIDE W/AMITRIPTYLINE' then dosec = substr(strength_new, 7, 1);
+else if drugname in ('CHLORDIAZEPOXIDE HYDROCHLORIDE & CL' 'CHLORDIAZEPOXIDE HYDROCHLORIDE-CLID' 'CHLORDIAZEPOXIDE HYDROCHLORIDE/CLID') 
+then dosec = substr(strength_new, 1, 1);
+else dosec = strength_new;
       
-  *convert to numeric;
-  dose = input(dosec, 8.);
+*convert to numeric;
+dose = input(dosec, 8.);
   
-  *cw id/file type;
-  cw_id = 'BENZO';
+*cw id/file type;
+cw_id = 'BENZO';
 run;
 ******************************************************************************************************************************************************;
 
 *union data from benzos, product name and CDC/NDC crosswalk;
 proc sql;
-	create table outtable.NDC_all as
-	(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, product_name, qty, dayssupply, '' as convert, 
-  drug, NDC, strength, strength_per_Unit, form, cw_id from ndc_nonmiss)
-	union all
-	(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, product_name, qty, dayssupply, '' as convert,
-  drug, NDC, strength_new as strength, strength_per_unit, form, cw_id from ndc_complete_miss)
-  union all 
-  (select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, '' as product_name, qty, dayssupply, convert,
-  '' as drug, NDC, strength_new as strength, dose as strength_per_unit, form, cw_id from outtable.benzo);
+create table outtable.NDC_all as
+(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, product_name, qty, dayssupply, '' as convert, 
+drug, NDC, strength, strength_per_Unit, form, cw_id from ndc_nonmiss)
+union all
+(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, product_name, qty, dayssupply, '' as convert,
+drug, NDC, strength_new as strength, strength_per_unit, form, cw_id from ndc_complete_miss)
+union all 
+(select presid, patid, period, newclusterid, letterid, dayssince, is_let, drugname, '' as product_name, qty, dayssupply, convert,
+'' as drug, NDC, strength_new as strength, dose as strength_per_unit, form, cw_id from outtable.benzo);
 quit;
 
 *change fentanyl drug names to match conversion crosswalk;
 data outtable.NDC_all;
-	length drug $ 17 cw_id $ 32;
-	set outtable.NDC_all;
-	*change drug names to match CDC crosswalk;
-	if product_name = "DURAGESIC" or product_name = "FENTANYL TRANSDERMAL SYSTEM"
-	or (product_name = "FENTANYL" and form = "TDM") or product_name = "NOVAPLUS FENTANYL" 
-	or product_name = "NOVAPLUS FENTANYL TRANSDERMAL SYSTEM"
-	then drug = "Fentanyl:patch";
-	if product_name = "ACTIQ" or product_name = "FENTANYL CITRATE" or product_name = "ORAL TRANSMUCOSAL FENTANYL CITRATE"
-	then drug = "Fentanyl:lozenge";
-	if product_name = "FENTORA" or product_name = "ABSTRAL" or (product_name = "FENTANYL" and form = "TAB") then drug = "Fentanyl:tablet";
-	if product_name = "LAZANDA" or product_name = "SUBSYS" then drug = "Fentanyl:spray";
+length drug $ 17 cw_id $ 32;
+set outtable.NDC_all;
+*change drug names to match CDC crosswalk;
+if product_name = "DURAGESIC" or product_name = "FENTANYL TRANSDERMAL SYSTEM"
+or (product_name = "FENTANYL" and form = "TDM") or product_name = "NOVAPLUS FENTANYL" 
+or product_name = "NOVAPLUS FENTANYL TRANSDERMAL SYSTEM"
+then drug = "Fentanyl:patch";
+if product_name = "ACTIQ" or product_name = "FENTANYL CITRATE" or product_name = "ORAL TRANSMUCOSAL FENTANYL CITRATE"
+then drug = "Fentanyl:lozenge";
+if product_name = "FENTORA" or product_name = "ABSTRAL" or (product_name = "FENTANYL" and form = "TAB") then drug = "Fentanyl:tablet";
+if product_name = "LAZANDA" or product_name = "SUBSYS" then drug = "Fentanyl:spray";
 run;
 
 *merge with conversion table;
 proc sort data = outtable.NDC_all;
-	by drug;
+by drug;
 run;
 
 proc sort data=outtable.opioid_conversion;
-	by drug;
+by drug;
 run;
 
-*MME calculation;
+*MME and DME (vme-valium milligram equivalents) calculation;
 *merge data;
 data outtable.total; 
-	length cw $ 32 cw_id $ 32;
-	merge outtable.NDC_all (in = ina) outtable.opioid_conversion;
-	by drug;
-  if cw_id = 'BENZO' then conversion_factor = convert;
-  if cw_id in ('NDC' 'PRODUCT') then cw = 'mme'; 
-  else cw = 'vme';
-	if ina;
+length cw $ 32 cw_id $ 32;
+merge outtable.NDC_all (in = ina) outtable.opioid_conversion;
+by drug;
+if cw_id = 'BENZO' then conversion_factor = convert;
+if cw_id in ('NDC' 'PRODUCT') then cw = 'mme'; 
+else cw = 'vme';
+if ina;
 run;
 
 ***********this macro separates obs. by prescribers of opioids vs. benzos********************************************************;
 *MME calculation-dmme = per/day, tmme/total mme in community;
 data total_&name;
-	length cw $ 32;
-	set outtable.total (rename = (presid = presold newclusterid = newclusterid_s));
-	if (qty < dayssupply) then qty = dayssupply;
-  if (dayssupply in (.,0)) then dayssupply = qty;
-	conversion_factorn = input(conversion_factor, 8.);
-	&name = strength_per_unit*(qty/dayssupply)*conversion_factorn;
-  &name._per_pres = strength_per_unit*qty*conversion_factorn;
-	*remove PRESID prefix from presid;
-	pres = prxchange('s/(PRESID)//',-1, presold);
-	*remove CID prefix from decid;
-	newclusterid = prxchange('s/(CID)//',-1, newclusterid_s);
-	decid = input(newclusterid, 8.);
-	presid = input(pres, 8.);
-  newclusterid_st = strip(newclusterid_s);
-  where (cw = "&name");
+length cw $ 32;
+set outtable.total (rename = (presid = presold newclusterid = newclusterid_s));
+if (qty < dayssupply) then qty = dayssupply;
+if (dayssupply in (.,0)) then dayssupply = qty;
+conversion_factorn = input(conversion_factor, 8.);
+&name = strength_per_unit*(qty/dayssupply)*conversion_factorn;
+&name._per_pres = strength_per_unit*qty*conversion_factorn;
+*remove PRESID prefix from presid;
+pres = prxchange('s/(PRESID)//',-1, presold);
+*remove CID prefix from decid;
+newclusterid = prxchange('s/(CID)//',-1, newclusterid_s);
+decid = input(newclusterid, 8.);
+presid = input(pres, 8.);
+newclusterid_st = strip(newclusterid_s);
+where (cw = "&name");
 run;
 
 *check values;
-/*proc sql;
-	create table check as
-	select count(*), drug, drugname, product_name, strength_per_unit, qty, dayssince, period, dayssupply, conversion_factor, &name from total_&name
-	group by drug, drugname, product_name, strength_per_unit, qty, dayssince, period, dayssupply, conversion_factor, &name;
+proc sql;
+create table check as
+select count(*), drug, drugname, product_name, strength_per_unit, qty, dayssince, period, dayssupply, conversion_factor, &name from total_&name
+group by drug, drugname, product_name, strength_per_unit, qty, dayssince, period, dayssupply, conversion_factor, &name;
 quit;
-
-proc print data = check (obs = 500);
-run;*/
 
 *letter assignment for removed decedents because no data in study period;           
 proc sql;
@@ -492,22 +489,22 @@ run;
 
 *print first vs. all decedents table;
 proc sort data = first_decid;
-	by presid all_dts;
+by presid all_dts;
 run;
 
 proc print data = first_decid;
-	title "Decedent IDs and dates per prescriber";
+title "Decedent IDs and dates per prescriber";
 run;
 
 *number of decedents overall and by letter type;
 proc sql;
-	create table check as
-	select count(presid) as ct, is_let, ct as decid_no from 
-	(
-	select count(all_decid) as ct, presid, is_let from first_decid
-	group by presid, is_let
-	)
-	group by is_let, decid_no;
+create table check as
+select count(presid) as ct, is_let, ct as decid_no from 
+(
+select count(all_decid) as ct, presid, is_let from first_decid
+group by presid, is_let
+)
+group by is_let, decid_no;
 quit;
 
 proc print data = check;
@@ -516,24 +513,24 @@ run;
 
 *collapse 1 + 2 decedents for chi-square;
 data check;
-	set check;
-	if decid_no = 3 then dec_no = 2;
-	else dec_no = decid_no;
+set check;
+if decid_no = 3 then dec_no = 2;
+else dec_no = decid_no;
 run;
 
 *collapse prescribers with 2 and 3 decedents;
 proc sql;
-	create table check_v2 as
-	select is_let, dec_no, sum(ct) as ct from 
-	check 
-	group by is_let, dec_no
-	order by is_let, dec_no;
+create table check_v2 as
+select is_let, dec_no, sum(ct) as ct from 
+check 
+group by is_let, dec_no
+order by is_let, dec_no;
 quit;
 
 proc freq data = check_v2;
-	weight ct;
-	table is_let*dec_no/chisq;
-	Title "Testing whether no. of decedents differs by letter";
+weight ct;
+table is_let*dec_no/chisq;
+Title "Testing whether no. of decedents differs by letter";
 run;
 
 *removed decedents;
@@ -577,21 +574,21 @@ quit;
 
 *print removed decedent id and letter ids;
 proc print data = first_decid_rmvd_grp_&name;
-	Title "Removed decedents and letter assignment";
+Title "Removed decedents and letter assignment";
 run;
 
 *no. of removed subsequent decedents in each study arm;
 proc sql;
-	title "No. removed subsequent decedents in each study arm";
-	select count(*) as ct, is_let from first_decid_rmvd_grp_&name
-	group by is_let;
+title "No. removed subsequent decedents in each study arm";
+select count(*) as ct, is_let from first_decid_rmvd_grp_&name
+group by is_let;
 quit;
 
 *Total number of opioid Rxs during study period;
 proc sql;
-	Title "Total Rxs in study period";
-	select count(*) as ct_Rxs from outtable.letters_sample_&name
-	where period ne .;
+Title "Total Rxs in study period";
+select count(*) as ct_Rxs from outtable.letters_sample_&name
+where period ne .;
 quit;
       
 *export removed decedent ID and letter assignment ;
