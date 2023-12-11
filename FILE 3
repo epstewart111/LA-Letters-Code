@@ -3,10 +3,10 @@
 **ES December 11, 2023;
 ************************************************************************************************************************; 
 
-ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Table1.xlsx";
+ods excel file="mydirectory/Table1.xlsx";
 	
 *file directory;
-libname savepath "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/";
+libname savepath "mydirectory/Data/";
 ods escapechar="^";
 	
 proc format;
