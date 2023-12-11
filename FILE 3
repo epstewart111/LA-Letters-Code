@@ -71,7 +71,7 @@ run
 
 *chi-square tests for sex, cause of death, and race;
 %macro chi(data, var, value);
-	proc freq data = &data noprint;
+	proc freq data = &data;
 		table &var*letter/out = &var._freq missing chisq oddsratio;
 		weight ct;
 		title "&data by letter";
