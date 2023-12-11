@@ -34,7 +34,7 @@ run;
 
 *import data. Each demographic variable is on different xlsx sheet.;
 %macro imp(name);
-	proc import datafile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/Table1.xlsx"
+	proc import datafile = "mydirectory/Table1.xlsx"
 		dbms = xlsx
 		out = &name;
 		sheet = "&name";
