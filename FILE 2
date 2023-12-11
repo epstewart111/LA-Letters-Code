@@ -9,7 +9,7 @@
 
 *directories
 include setup.do
-global data mydirectory/SD-CHCF/epstewar/LA_letters/Data
+global data mydirectory/Data
 
 *get flat file for morphine milligram equivalents or diazepam milligram equivalents (valium milligram equivalents)
 foreach var in mme vme {
