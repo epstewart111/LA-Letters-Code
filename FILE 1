@@ -10,16 +10,16 @@
 %let name = mme;
 
 *output results for consort diagram to PDF;
-ods pdf file = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/Sample_&name..pdf";
+ods pdf file = "mydirectory/Sample_&name..pdf";
 
 *filepath;
-libname outtable "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
+libname outtable "mydirectory/LA_letters/Data";
 
 %macro imp (file, file2);
   %do i = 1 %to 5;
          data &file._temp&i;
             %let _EFIERR_ = 0; 
-             infile "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/&file._sheet&i..csv" delimiter = ',' MISSOVER DSD lrecl=32767 firstobs=2 ;
+             infile "mydirectory/&file._sheet&i..csv" delimiter = ',' MISSOVER DSD lrecl=32767 firstobs=2 ;
                informat PRESID $32. ;
                informat NEWCLUSTERID $32. ;
                informat PATID $32. ;
@@ -91,9 +91,9 @@ sheet = "&sheet";
 getnames = yes;
 run;
 %mend imp;
-%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/opioid_ndcs.xlsx, outtable.opioid_ndc, Sheet1);
-%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/opioid_conversion.xlsx, outtable.opioid_conversion, Sheet1);
-%imp (/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/product_name_cw.xlsx, outtable.product_name_cw, Sheet1);
+%imp (mydirectory/opioid_ndcs.xlsx, outtable.opioid_ndc, Sheet1);
+%imp (mydirectory/opioid_conversion.xlsx, outtable.opioid_conversion, Sheet1);
+%imp (mydirectory/product_name_cw.xlsx, outtable.product_name_cw, Sheet1);
 
 *convert conversion_factor to numeric;
 data outtable.opioid_conversion;
@@ -445,7 +445,7 @@ quit;
 *export final smaple as STATA file;
 proc export
 data = outtable.letters_sample_&name
-outfile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/letters_sample_&name..dta"
+outfile = "mydirectory/letters_sample_&name..dta"
 replace;
 run;
   
@@ -593,7 +593,7 @@ quit;
       
 *export removed decedent ID and letter assignment ;
 proc export data = work.first_decid_rmvd_grp_&name
-outfile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/decid_rmvd_&name..csv"
+outfile = "mydirectory/decid_rmvd_&name..csv"
 replace;
 run;
 ods pdf close;
