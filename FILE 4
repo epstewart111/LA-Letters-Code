@@ -1,14 +1,42 @@
 /***************************************************************************************************************************
 *FILE GOALS                                                                                                                *
-*****1. COUNTS AND CHI-SQUARES FOR PRESCRIBER CHARACTERISTICS FOR TABLE 2                                                  *
+*****1. COUNTS AND CHI-SQUARES FOR TABLE 2 PRESCRIBER DEMOGRAPHICS                                                         *
 *ES JULY 7, 2023                                                                                                           *
 ****************************************************************************************************************************/
 
-*filepath to output;
-ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2_v2.xlsx";
-
 *libname;
 libname table "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
+	
+*filepath to output;
+ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2.xlsx";
+ods escapechar="^";
+
+*format values;
+proc format;
+	value $characteristicf 'F'= 'Female' 
+	'Am' = 'Male'
+	'Zmiss' = 'Missing'
+	'AMD' = 'Medical Doctor (MD)'
+	'BDO' = 'Doctor of osteopathy (DO)'
+	'NP' = 'Nursing (NP/FNP/DNP)'
+	'PA' = 'Physician assistant (PA)'
+	'Other' = 'Other'
+	'EM' = "Emergency medicine"
+	'DIM' = 'Internal medicine'
+	'Psych' = 'Psychiatry'
+	'QFM'  = 'Family medicine'
+	'Rother' = 'Other'
+	'Smiss' = 'Missing'
+	'Asian' = 'Asian/Pacific Islander'
+	'Bwhite' = 'Non-Hispanic White'
+	'Cother' = 'Other'
+	'Declined' = 'Declined to disclose'
+	'miss' = 'Missing'
+	'LA' = 'Los Angeles City'
+	'LB' = 'Long Beach or Pasadena City'
+	'ONE' = '1'
+	'GT' = '>1';
+run;
 
 *import data;
 proc import out = temp
@@ -19,74 +47,209 @@ run;
 
 *categorize demos;
 data temp2;
-length ethn $ 32. length spec $ 32.;
+length letter $32. ethn $60. spec $60. pres_type $60. gender_v2 $60.;
 set temp;
+
+*gender;
+if gender = '' then gender_v2 = 'Zmiss';
+else if gender = 'M' then gender_v2 = 'Am';
+else gender_v2 = gender;
+
 *race/ethnicity;
-if Cultural_Background = '' then ethn = '';
+if Cultural_Background = '' then ethn = 'miss';
 else if Cultural_Background in ('Chinese' 'Chinese; Taiwanese' 'Filipino' 'Filipino; Other Hispanic' 'Indian' 'Pakistani' 'Korean' 'Other Asian' 
 'Vietnamese' 'Vietnamese; Other Asian' 'Thai' 'Taiwanese') then ethn = 'Asian';
-else if Cultural_Background in ('African' 'African American' 'Black; African' 'Black')
-then ethn = 'Black';
 else if Cultural_Background in ('European' 'White' 'White; Middle Eastern' 'Middle Eastern' 'Middle Eastern; Other Hispanic')
-then ethn = 'White';
-else if Cultural_Background in ('Mexican' 'Other Hispanic' 'South American')
-then ethn = 'Hispanic'; 
+then ethn = 'Bwhite';
 else if Cultural_Background = 'Declined' then ethn = 'Declined';
-else ethn = 'Other';
+else ethn = 'Cother';
 
 *prescriber speciality;
-if Primary_Specialty = '' then spec = '';
+if Primary_Specialty = '' then spec = 'Smiss';
 else if Primary_Specialty in ('Emergency' 'Emergency Medicine') then spec = 'EM';
-else if Primary_Specialty in ('Family' 'Family Medicine') then spec = 'FM';
-else if Primary_Specialty = 'General Practice' then spec = 'GP';
-else if Primary_Specialty in ('Internal' 'Internal Medicine') then spec = 'IM';
+else if Primary_Specialty in ('Family' 'Family Medicine') then spec = 'QFM';
+else if Primary_Specialty in ('Internal' 'Internal Medicine') then spec = 'DIM';
 else if Primary_Specialty = 'Psychiatry' then spec = 'Psych';
-else spec = 'Other';
+else spec = 'Rother';
 
 *prescriber type;
-if type in ('DDS' 'DDS, MD' 'DMD') then presc_type = 'DDS';
-else if type in ('DNP' 'FNP' 'NP' 'RNNP') then presc_type = 'NP';
-else if type = 'MD' then presc_type = 'MD';
-else if type = 'PA' then presc_type = 'PA';
-else if type = 'DO' then presc_type = 'DO';
-else presc_type = 'Other';
+if type in ('DNP' 'FNP' 'NP' 'RNNP') then pres_type = 'NP';
+else if type = 'MD' then pres_type = 'AMD';
+else if type = 'PA' then pres_type = 'PA';
+else if type = 'DO' then pres_type = 'BDO';
+else pres_type = 'Other';
 
 *voided;
 where Prescriber_ID ne 'P019' and Prescriber_ID ne 'P476';
 run;
 
+proc freq data = temp2;
+	table gender_v2;
+run;
+
 *county data (from ME's computer);
 data county;
-input letter no county $;
+length letter $32. county $60.;
+input letter $ no county $;
 cards;
-1 9 P
-0 11 P
-1 8 LB
-0 14 LB
-1 240 LA
-0 259 LA
+E 17 LB
+C 25 LB
+E 240 LA
+C 259 LA
 ;
 run;
 
-*chi-square test for county;
-proc freq data = county;
-tables county*letter/chisq;
-weight no;
-title "Chi-square prescriber county by letter";
+*no. of decedents;
+proc sql;
+	create table decno as
+	select distinct presid, newclusterid, is_let from table.study_all;
+quit;
+
+data decno;
+	length decid_cat $60. letter $32.;
+	set decno;
+	by presid;
+	if first.presid then dec_ct = 1;
+	else dec_ct+1;
+	if dec_ct > 1 then decid_cat = 'GT';
+	else decid_cat = 'ONE';
+	if is_let = 0 then letter = 'C';
+	else letter = 'E';
+	if last.presid then output;
 run;
 
 *chi-square tests for all other characteristics that contain missing;
-%macro chk(v);
-proc freq data = temp2;
-table letter*&v/missing chisq;
+%macro chi(dat, v, value);
+proc freq data = &dat;
+table letter*&v/missing chisq out = &v._freq;
+%if &dat = county %then %do;
+weight no;
+%end;
 title "Chi-square prescriber &v by letter";
+output out = &v._chi chisq;
+format &v;
 run;
-%mend chk;
-/*%chk(type)*/
-%chk(presc_type);
-/*%chk(primary_specialty);*/
-%chk(spec);
-%chk(gender);
-/*%chk(cultural_background);*/
-%chk(ethn);
+
+options validvarname=any;
+data &v._chi;
+length characteristic $60.;
+set &v._chi;
+CHI = '^{unicode chi}^{super 2}';
+Statistic = cat(chi, ' = ', round(_PCHI_,0.01));
+'Two-sided P value'n = round(P_PCHI, .001);
+characteristic = &value;
+keep characteristic Statistic 'Two-sided P Value'n;
+format 'Two-sided P value'n 8.3;
+run;
+
+%mend chi;
+%chi(temp2, pres_type, 'NP');
+%chi(temp2, spec, 'QFM');
+%chi(temp2, gender_v2, 'Declined');
+%chi(temp2, ethn,'Cother');
+%chi(county, county, 'LB');
+%chi(decno, decid_cat, 'ONE');
+
+*mean no. of decedents;
+proc ttest data = decno test = diff sides = 2;
+	class Letter;
+	var dec_ct;
+	title "T-test decid_cat by letter";
+	ods output Ttests = tt;
+run;
+
+data tt;
+	length characteristic $60.;
+	retain characteristic Statistic 'Two-sided P value'n;
+	set tt;
+	'Two-sided P value'n = round(Probt, .001);
+	Statistic = cat('t = ', round(tvalue, .01));
+  characteristic = catx(' ', variable, (BYTE(177)), '^{unicode 03C3}');
+	where variances = "Unequal";
+	keep characteristic Statistic 'Two-sided P value'n;
+	format 'Two-sided P value'n 8.3;
+run;
+
+*transpose data to append for table;
+%macro trans(dat, var, title);
+
+*characteristic counts;
+proc sql;
+	create table &var as 
+	
+	%if &dat ne county %then %do;
+	select count(*) as ct, &var as characteristic, letter
+	from &dat
+	group by &var, letter;
+  %end;
+  
+  %else %do;
+  select sum(no) as ct, &var as characteristic, letter
+  from &dat 
+  group by &var, letter;
+  %end;
+quit;
+
+*transpose counts;
+proc sort data = &var;
+	by characteristic;
+run;
+
+*transpose data to wide;
+proc transpose data = &var out = &var._trans (drop =  _NAME_);
+	id letter;
+	by characteristic;
+run;
+
+*get totals for each group;
+proc sql;
+	create table &var._temp as
+	select Characteristic, 
+	/*percentage*/
+	catx(' ', E, (cat('(', round((E/sum(E)), .0001)*100, '%', ')'))) as Comparator, 
+	catx(' ', C, (cat('(', round((C/sum(C)), .0001)*100, '%', ')'))) as Standard from &var._trans;
+quit;
+
+data &var._temp;
+	length characteristic $ 20.;
+	set &var._temp;
+run;
+
+proc sql;
+	create table &var._title as 
+	select distinct &title as Characteristic, '' as Comparator, '' as Standard from &var._temp;
+quit;
+
+proc sort data = &var._temp;
+	by characteristic;
+run;
+
+proc sort data = &var._chi;
+	by characteristic;
+run;
+
+data &var._counts;
+	length comparator $60. standard $60.;
+	merge &var._temp &var._chi;
+	by characteristic;
+run;
+%mend trans;
+%trans(temp2, pres_type, "Professional practice");
+%trans(temp2, gender_v2, "Gender");
+%trans(temp2, ethn, "Race/Ethnicity");
+%trans(temp2, spec, "Primary speciality");
+%trans(county, county, "County");
+%trans(decno, decid_cat, "No. of decedents");
+
+*merge stats. with counts;
+data total;
+	retain Characteristic Comparator Standard Statistic 'Two-sided P value'n;
+	length Comparator $60. Standard $60.;
+	set pres_type_title pres_type_counts gender_v2_title gender_v2_counts ethn_title ethn_counts
+	spec_title spec_counts county_title county_counts decid_cat_title decid_cat_counts;
+	format Characteristic $characteristicf.;
+run;
+
+proc print data = total;
+run;
 ods excel close;
