@@ -10,6 +10,7 @@ libname table "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_l
 *filepath to output;
 ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2.xlsx";
 ods escapechar="^";
+%LET PLUSMIN=%SYSFUNC(BYTE(177)) ;
 
 *format values;
 proc format;
@@ -35,7 +36,8 @@ proc format;
 	'LA' = 'Los Angeles City'
 	'LB' = 'Long Beach or Pasadena City'
 	'ONE' = '1'
-	'GT' = '>1';
+	'GT' = '>1'
+	'decno' = "No. of decedents "&PLUSMIN" ^{unicode 03C3}";
 run;
 
 *import data;
@@ -155,19 +157,52 @@ proc ttest data = decno test = diff sides = 2;
 	class Letter;
 	var dec_ct;
 	title "T-test decid_cat by letter";
-	ods output Ttests = tt;
+	ods output Ttests = tt Statistics = stats (keep = class mean StdDev where = (class in ('E' 'C')));
 run;
 
 data tt;
-	length characteristic $60.;
 	retain characteristic Statistic 'Two-sided P value'n;
+	length characteristic $60.;
 	set tt;
 	'Two-sided P value'n = round(Probt, .001);
 	Statistic = cat('t = ', round(tvalue, .01));
-  characteristic = catx(' ', variable, (BYTE(177)), '^{unicode 03C3}');
+  characteristic = "decno";
 	where variances = "Unequal";
 	keep characteristic Statistic 'Two-sided P value'n;
 	format 'Two-sided P value'n 8.3;
+run;
+
+data stats;
+	set stats;
+	mean = round(mean,.01);
+	std = round(StdDev,.01);
+	combined = cat(mean, ' (', std, ')');
+	keep class combined;
+run;
+
+*sd by letter;
+proc transpose data = stats out = trans;
+var _all_;
+run;
+
+data trans;
+	length characteristic $60.;
+	set trans (rename = (COL1 = E COL2 = C));
+	if _name_ = 'combined';
+	characteristic = 'decno';
+	keep characteristic E C;
+run;
+
+proc sql;
+	create table decct as
+	select t.characteristic, t.E as Comparator,
+	t.C as Standard, l.Statistic, l.'Two-sided P value'n from trans t 
+	join 
+	tt l 
+	on t.characteristic = l.characteristic;
+quit;
+
+proc print data = decct;
 run;
 
 *transpose data to append for table;
@@ -220,6 +255,11 @@ proc sql;
 	select distinct &title as Characteristic, '' as Comparator, '' as Standard from &var._temp;
 quit;
 
+data &var._title;
+	length characteristic $80.;
+	set &var._title;
+run;
+
 proc sort data = &var._temp;
 	by characteristic;
 run;
@@ -245,11 +285,12 @@ run;
 data total;
 	retain Characteristic Comparator Standard Statistic 'Two-sided P value'n;
 	length Comparator $60. Standard $60.;
-	set pres_type_title pres_type_counts gender_v2_title gender_v2_counts ethn_title ethn_counts
-	spec_title spec_counts county_title county_counts decid_cat_title decid_cat_counts;
+	set gender_v2_title gender_v2_counts pres_type_title pres_type_counts spec_title spec_counts
+	ethn_title ethn_counts county_title county_counts decid_cat_title decid_cat_counts decct;
 	format Characteristic $characteristicf.;
 run;
 
 proc print data = total;
 run;
 ods excel close;
+
