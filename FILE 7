@@ -48,7 +48,7 @@ by decid_cat is_let post;
 run;
 
 *export per-clinician total outcome for R boxplot;
-proc export data = temp outfile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Code/box_data_&var1..csv"
+proc export data = temp outfile = "mydirectory/box_data_&var1..csv"
 replace;
 run;
 
