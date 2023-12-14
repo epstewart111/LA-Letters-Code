@@ -1,36 +1,125 @@
-##########################################################################################################
-#FILE GOALS:                                                                                             #
-####1. FIGURE WHICH SHOWS ADJUSTED POST-INTERVENTION MEANS FOR >1 LETTER AND 1 LETTER                    #
-##ES JULY 10, 2023                                                                                       #
-##########################################################################################################
+/***************************************************************************************************************************
+*FILE GOALS                                                                                                                *
+*****1. OUTLIER ANALYSIS FOR 10/3/23 REVISE AND RESUBMIT                                                                   *
+*ES DECEMBER 14, 2023                                                                                                      *
+****************************************************************************************************************************/
 
-#libraries
-library(readr)
-library(ggplot2)
-library(dplyr)
+*filepath;
+libname savepath "mydirectory/LA_letters/Data";
 
-#int <- read.csv("/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/R bar chart v2.csv")
-#int
+*Group 1: MME or DME;
+%let var1 = mme;
 
-#opioid data (Table 4 in results spreadsheet on drive)
-post <- c(464.97, 73.78, 96.29, 84.74)
-lcl <- c(431.36, 65.86, 93.66, 82.55)
-ucl <- c(498.57, 81.70, 98.91, 86.93)
-Letter <- c('Standard', 'Comparator', 'Standard', 'Comparator')
-dec <- c('>1 death', '>1 death', '1 death', '1 death')
-opioids <- data.frame(post, lcl, ucl, Letter, dec)
-opioids
+*Group 2: is_let or decid_cat;
+%let var2 = is_let;
 
-#Figure 1
-ggplot(opioids, aes(fill = Letter, x = dec, y = post)) + geom_bar(stat = "Identity", position = position_dodge()) +
-geom_errorbar(aes(x = dec, ymin = lcl, ymax = ucl), width = 0.4, position = position_dodge(0.9)) +
-ylab("Adjusted Total Weekly Mean MME Post-Intervention") +
-xlab("") + 
-theme_bw() + 
-theme(axis.text=element_text(size = 13))  +
-theme(axis.title.y=element_text(size = 16, margin = margin(t=0, r=16, b=0, l=0))) +
-scale_fill_manual(values=c("darkblue", "skyblue"))
+*Import data;
+proc import datafile = "mydirectory/analytic_weekly_&var1..dta"
+out = analytic
+replace;
+run;
 
-#save plot
-ggsave("/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Graphs/Fig1.jpg")
+*Sum outcome (MME or DME) by clinician;
+proc sql;
+create table temp as 
+select presid, is_let, decid_cat, post, sum(w&var1._total) as total_&var1 from analytic
+group by presid, is_let, decid_cat, post;
+quit;
+
+*Log outcome;
+data temp;
+set temp;
+if total_&var1 ne 0 then do;
+log_total = log(total_&var1);
+end;
+else do;
+log_total = 0;
+end;
+run;
+
+*check mean/median by group;
+proc sort data = temp;
+by decid_cat is_let post;
+run;
+
+proc means data = temp mean median;
+var log_total;
+by decid_cat is_let post;
+run;
+
+*export per-clinician total outcome for R boxplot;
+proc export data = temp outfile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Code/box_data_&var1..csv"
+replace;
+run;
+
+proc sql;
+create table presc_total as
+
+/*step 3: change missing log outcome to zero*/
+select *,
+case 
+when log = . then 0 
+else log
+end as log_total from
+
+/*step 2: log outcome*/
+(select *, log(total_&var1) as log from 
+
+/*step 1: pre-intervention mean outcome by group*/
+(select presid, &var2, sum(w&var1._total) as total_&var1 from analytic
+where post = 0
+group by presid, &var2)
+/*End step 1*/
+
+t)
+/*End step 2*/
+
+;
+/*End step 3*/
+quit;
+
+*mean outcome by group;
+proc sort data = presc_total;
+by &var2;
+run;
+
+proc means data  = presc_total median q1 q3 noprint;
+var log_total;
+by &var2;
+output out = stats (drop = _TYPE_ _FREQ_) q1 = q3 = / autoname;
+Title "Log &var1 &var2";
+run;
+
+*join quartiles with sample;
+proc sql;
+create table presc_total_v2 as 
+select t.*, l.log_total_Q1 as q1, l.log_total_Q3 as q3 from presc_total t
+left join 
+stats l 
+on t.&var2 = l.&var2;
+quit;
+
+*Tukey's fences for outliers;
+data presc_total_v2;
+set presc_total_v2;
+iqr_inc = 1.5*(q3-q1);
+outlier_hi = q3 + iqr_inc;
+outlier_low = q1 - iqr_inc;
+if log_total > outlier_hi or log_total < outlier_low then outlier = 1;
+else outlier = 0;
+run;
+
+*counts/percentages by outlier status;
+proc freq data = presc_total_v2;
+table &var2*outlier/chisq oddsratio;
+title "&var2, &var1 & outliers";
+run;
+
+*outcome and log outcome by group;
+proc ttest data = presc_total_v2;
+class &var2;
+var log_total total_&var1;
+title "&var2 &var1";
+run;
+	
 
