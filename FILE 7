@@ -4,9 +4,6 @@
 *ES DECEMBER 14, 2023                                                                                                      *
 ****************************************************************************************************************************/
 
-*filepath;
-libname savepath "mydirectory/LA_letters/Data";
-
 *Group 1: MME or DME;
 %let var1 = mme;
 
