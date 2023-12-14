@@ -1,244 +1,27 @@
-****************************************************************************************************************
-*FILE GOALS                                                                                                    *
-*****1. METOBIT RESULTS FOR THREE WAY INTERACTION                                                              *
-*****2. ADJUSTED POST-INTERVENTION MMES                                                                        *        
-*****3. CONVERT RESULTS TO MATRICES AND OUTPUT                                                                 *                                                 *
-*ES JULY 10, 2023                                                                                              *
-****************************************************************************************************************
+#################################################################################################################################
+## GOALS:                                                                                                                       #
+#######1. QUANTILE-QUANTILE (Q-Q) PLOT 												#
+# ES April 1, 2022														# #
+#################################################################################################################################
 
-*directories
-include setup.do
-global log $dua/SD-CHCF/epstewar/LA_letters/Code
-local dt = "`c(current_date)' `c(current_time)'"
-log using "$log/Logs/results_v4_`dt'.log"
-global data $dua/SD-CHCF/epstewar/LA_letters/Data
-global boot $dua/SD-CHCF/epstewar/LA_letters/Bootstrap
-global output $dua/SD-CHCF/epstewar/LA_letters/Results
+foreach var in mme vme {
 
-*load data
-use $data/analytic_weekly_mme, clear
+*get data
+use mydirectory/analytic_weekly_`var', clear
 
-*model coefficients
-metobit log_total post##is_let##decid_cat || decid: || presid:, ll(0) nolog dnumerical
+*output
+global output /schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Graphs
 
-*pre-intervention values
-keep if post == 0
+*make variables lower-case
+rename *, lower
 
-*replace baseline obs. with post = 1 to get adjusted weekly value
-replace post = 1
+*Q-Q graphs 
+*Change title and y-axis depending on MME or DME
+*MME where MME ne 0, or VME
+qnorm w`var'_total if w`var'_total > 0, title("Quantile-Quantile (Q-Q) Plot") legend(on label(1 "Total weekly DME")) legend(on label(2 "Normal distribution")) graphregion(fcolor(white)) ytitle("DME by provider-week")  xtitle("Theoretical quantiles")
+graph export "$output/qqplot_`var'_pos.pdf", replace
 
-*trim 9% outliers
-egen float pct = pctile(wmme_total), p(91)
-keep if wmme_total < pct
-
-*add coefficients to df
-gen post_b1 = e(b)[1,2]*post
-gen let_b2 = e(b)[1,4]*is_let
-gen post_let_b3 = e(b)[1,8]*is_let*post
-gen decid_b4 = e(b)[1,10]*decid_cat
-gen post_decid_b5 = e(b)[1,14]*decid_cat*post
-gen let_decid_b6 = e(b)[1,18]*is_let*decid_cat
-gen let_decid_post_b7 = e(b)[1,26]*is_let*post*decid_cat
-
-*add all effects for given levels and exponentiate to get change in value (source: Science supplement)
-gen perc_chng = exp(post_b1+let_b2+post_let_b3+decid_b4+post_decid_b5+let_decid_b6+let_decid_post_b7)
-
-*check values
-egen tag = tag(is_let post decid_cat)
-list is_let post decid_cat post_b1 let_b2 post_let_b3 decid_b4 post_decid_b5 let_decid_b6 let_decid_post_b7 perc_chng if tag == 1
-drop tag
-
-*adjusted pre-intervention means
-gen wmme_threeway_adj = perc_chng*wmme_total
-gen diff = wmme_threeway_adj - wmme_total
-save $data/est_mme, replace
-
-*get means and CIs for baseline, post, and difference pre-to-post
-foreach var in wmme_total wmme_threeway_adj diff {
-
-*decedent group
-foreach n1 in 0 1 {
-*letter group
-foreach n2 in 0 1 {
-use $data/est_mme, clear
-bootstrap r(mean), reps(500): sum `var' if decid_cat == `n1' & is_let == `n2' 
-matrix `var'_`n1'_`n2' = r(table)'
-
-*convert t-test output to matrices
-matrix c1 = `var'_`n1'_`n2'[1,1]
-matrix c2 = `var'_`n1'_`n2'[1,5] 
-matrix c3 = `var'_`n1'_`n2'[1,6]
-matrix `var'_`n1'_`n2' = c1, c2, c3
-matrix colnames `var'_`n1'_`n2' = mean lcl ucl
-matrix rownames `var'_`n1'_`n2' = `var'_`n1'_`n2'
-matrix list `var'_`n1'_`n2'
-
-*convert to dataframe (to combine with bootstrapped estimates)
-svmat `var'_`n1'_`n2' 
-egen tag = tag(`var'_`n1'_`n2'1)
-drop if tag == 0
-keep `var'_`n1'_`n2'1
-save $data/`var'_`n1'_`n2', replace
+*log MME or VME
+qnorm log_total if log_total > 0, title("Quantile-Quantile (Q-Q) Plot") graphregion(fcolor(white)) legend(on label(1 "Total log weekly DME")) legend(on label(2 "Normal distribution")) ytitle(`"Log(DME) by provider-week"') xtitle("Theoretical quantiles")
+graph export `"$output/qqplot_`var'.pdf"', replace
 }
-}
-}
-
-*get diff-in-diff for each decedent group
-*diff. pre-to-post between interventions just one letter
-*drop lcl and ucl
-matrix diff_0_1_mean = diff_0_1[1,1]
-matrix diff_0_0_mean = diff_0_0[1,1]
-matrix diff_1_0_mean = diff_1_0[1,1]
-matrix diff_1_1_mean = diff_1_1[1,1]
-
-*subtract mean diff pre-to-post for each letter and decedent group
-matrix diff_0 = diff_0_1_mean - diff_0_0_mean
-matrix list diff_0
-*diff. pre-to-post between interventions more than one letter
-matrix diff_1 = diff_1_1_mean - diff_1_0_mean
-matrix list diff_1
-
-*number of obs in each letter and decedent group
-use $data/est_mme, clear
-egen group = group(decid_cat is_let), label
-tab group
-
-*bootstrapping post-intervention diff-in-diff CIs
-set seed 135791
-
-local i = 2000
-local j = 744
-
-forvalues i = 1(1)`i' {
-
-*decedent level
-foreach n in 0 1 {
-	
-*sample obs from data
-use $data/est_mme, clear
-keep wmme_threeway_adj is_let presid decid_cat
-bsample `j', strata(is_let decid_cat) 
-
-ttest wmme_threeway_adj if decid_cat == `n', by(is_let)
-matrix wmme_threeway_adj_0`i'_`n' = (r(mu_1))
-matrix wmme_threeway_adj_1`i'_`n' = (r(mu_2))
-
-*convert to dataframes
-svmat wmme_threeway_adj_0`i'_`n'
-keep wmme_threeway_adj_0`i'_`n'1
-egen tag = tag(wmme_threeway_adj_0`i'_`n'1)
-drop if tag == 0
-drop tag
-
-svmat wmme_threeway_adj_1`i'_`n'
-rename (wmme_threeway_adj_1`i'_`n'1 wmme_threeway_adj_0`i'_`n'1) (wmme_threeway_adj_let wmme_threeway_adj_cont)
-gen samp = `i'
-save $boot/wmme_threeway_adj_1`i'_`n', replace
-}
-}
-
-*append adjusted post estimates for all bootstrapped samples
-foreach n in 0 1 {
-use $boot/wmme_threeway_adj_11_`n', clear
-
-forvalues i = 2/2000 {
-	append using $boot/wmme_threeway_adj_1`i'_`n'
-}
-
-merge 1:1 _n using $data/wmme_total_`n'_1, nogen
-merge 1:1 _n using $data/wmme_total_`n'_0, nogen
-
-*fill in column with adjusted values
-egen wmme_pre_let = max(wmme_total_`n'_11)
-egen wmme_pre_cont = max(wmme_total_`n'_01)
-drop wmme_total_`n'_11 wmme_total_`n'_01
-
-*pre-to-post difference control 
-gen diff_cont = wmme_threeway_adj_cont - wmme_pre_cont
-gen diff_let = wmme_threeway_adj_let - wmme_pre_let
-
-*diff-in-diff
-sort diff_cont diff_let
-gen wmme_threeway_diff_in_diff = diff_let - diff_cont
-describe, fullnames
-
-*rename diff-in-diff variable for each decedent group
-rename wmme_threeway_diff_in_diff wmme_threeway_diff_in_diff_`n'
-save $boot/diff_in_diff_`n', replace
-}
-
-*merge diff-in-diff estimates to get diff-in-diff-in-diff
-merge 1:1 _n using $boot/diff_in_diff_0, nogen
-describe, fullnames
-
-*subtract diff-in-diff for each decedent group to get diff-in-diff-in-diff
-gen diff_in_diff_in_diff = wmme_threeway_diff_in_diff_1 - wmme_threeway_diff_in_diff_0
-save $boot/diff_in_diff_in_diff, replace
-
-*confidence bands
-foreach var in wmme_threeway_diff_in_diff_0 wmme_threeway_diff_in_diff_1 diff_in_diff_in_diff {
-use $boot/diff_in_diff_in_diff, clear
-xtile pct = `var', n(40)
-sort `var'
-gen rn = _n
-list `var' if rn == 50 | rn == 1950
-
-*quantile approach
-collapse (last) `var', by(pct)
-keep if pct == 1 | pct == 39
-xpose, clear 
-mkmat v1, matrix(`var'_lcl)
-matrix `var'_lcl = `var'_lcl[2,1]
-matrix list `var'_lcl
-mkmat v2, matrix (`var'_ucl)
-matrix `var'_ucl = `var'_ucl[2,1]
-matrix list `var'_ucl
-}
-
-*get diff-in-diff-in-diff mean 
-matrix diff_in_diff_in_diff_mean = diff_1 - diff_0
-
-*output to excel  
-putexcel set $output/results_wmme_v2.xlsx, sheet(table4) modify
-
-*matrices for threeway interaction (Table 4)
-matrix pre = wmme_total_0_0, wmme_total_0_1, wmme_total_1_0, wmme_total_1_1
-matrix post = wmme_threeway_adj_0_0, wmme_threeway_adj_0_1, wmme_threeway_adj_1_0, wmme_threeway_adj_1_1
-matrix diff = diff_0_0, diff_0_1, diff_1_0, diff_1_1
-matrix did = diff_1, wmme_threeway_diff_in_diff_1_lcl, wmme_threeway_diff_in_diff_1_ucl, diff_0, wmme_threeway_diff_in_diff_0_lcl, wmme_threeway_diff_in_diff_0_ucl,.,.,.,.,.,.
-matrix didid = diff_in_diff_in_diff_mean, diff_in_diff_in_diff_lcl, diff_in_diff_in_diff_ucl,.,.,.,.,.,.,.,.,.
-matrix table4 = pre\post\diff\did\didid
-matrix colnames table4 = "stand., one letter" "lcl" "ucl" "comp., one letter" "lcl" "ucl" "stand., >1 letter" "lcl" "ucl" "comp., >1 letter" "lcl" "ucl"
-matrix rownames table4 = "pre" "post" "diff" "diff-in-diff" "diff-in-diff-in-diff"
-matrix list table4
-putexcel A1 = matrix(table4), names nformat(number_d4)
-putexcel A2:A6 B1:M1, bold
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
