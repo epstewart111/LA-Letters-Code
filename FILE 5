@@ -1,10 +1,9 @@
 /***************************************************************************************************************************
 *FILE GOALS                                                                                                                *
 *****1. PRIMARY AND SECONDARY ANALYSES FOR MME AND DME                                                                     *
-*****2. PUT IN MATRICES                                                                                                    *
+*****2. EXTRACT INTO MATRICES AND OUTPUT                                                                                                *
 *ES DECEMBER 12, 2023                                                                                                           *
 ****************************************************************************************************************************/
-
 
 *directories
 include setup.do
@@ -19,6 +18,7 @@ global graph $dua/Graphs
 *load data
 *run analyses on mme or vme (dme)
 
+*loop on each outcome
 foreach file in mme vme {
 
 *import
@@ -185,7 +185,7 @@ sort w`file'_adj_diff_in_diff
 gen rn = _n
 list if rn == 50 | rn == 1950
 
-*quantile approach
+*quantiles
 collapse (last) w`file'_adj_diff_in_diff, by(pct)
 keep if pct == 1 | pct == 39
 xpose, clear 
