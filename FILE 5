@@ -1,8 +1,8 @@
 /***************************************************************************************************************************
 *FILE GOALS                                                                                                                *
-*****1. PRIMARY AND SECONDARY ANALYSES FOR MME AND DME                                                                     *
-*****2. EXTRACT INTO MATRICES AND OUTPUT                                                                                                *
-*ES DECEMBER 12, 2023                                                                                                           *
+*****1. PRIMARY, SECONDARY AND POST-HOC ANALYSES FOR MME AND DME                                                           *
+*****2. EXTRACT INTO MATRICES AND OUTPUT                                                                                   *
+*ES DECEMBER 12, 2023                                                                                                      *
 ****************************************************************************************************************************/
 
 *directories
