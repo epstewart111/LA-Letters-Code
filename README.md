@@ -7,19 +7,21 @@
     DATA (collected from October 2017 to May 2021)
         1. Decedent data was obtained from the LA Medical Examiner-Coroner
         2. Prescriber demographics and prescriptions were obtained from the Controlled Substance Utilization Review and Evaluation System (CURES)
-        3. Conversion factors, drug names and strengths, and drug NDCs were obtained from the Centers for Disease Control and Prevention 
-           a. Opioid National Drug Code and Oral MME Conversion File Update. https://www.cdc.gov/opioids/data-resources/index.html (2023)
+        3. MME Conversion factors, drug names and strengths, and drug NDCs obtained from the Centers for Disease Control and Prevention 
+           a. Opioid National Drug Code and Oral MME Conversion File Update. https://www.cdc.gov/opioids/data-resources/index.html (2023). 
+        4. DME conversion factors and info. from Borelli et al.
+           b. Borrelli, E. P., Bratberg, J., Hallowell, B. D., Greaney, M. L. & Kogut, S. J. Application of a diazepam milligram equivalency algorithm to assess benzodiazepine dose intensity in Rhode Island in 2018. J Manag Care Spec Pharm 28, 58–68 (2022).
 
     ANALYSES 
          PRIMARY
          1.  Multi-level (mixed effects) left censored regression
-         2.  Estimates used to derive adjusted MME to asssess whether difference in total mean pre- and post-intervention average daily MME differed between prescibers
-         randomized to a standard and comparator version of a letter
+         2.  Estimates used to derive adjusted MME and DME to assess whether difference in total mean pre-to-post intervention average daily MME or DME differed between study arms 
 
          SECONDARY
          1. Rxs => 50 MME
          2. Rxs > 90 MME
          3. New patients who received an opioid Rx
+
      
          POST-HOC
          1. Equality of coefficients testing whether study start coefficient (weeks 4-22) differed from study end (weeks 23-52)
