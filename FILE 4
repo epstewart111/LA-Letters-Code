@@ -5,10 +5,10 @@
 ****************************************************************************************************************************/
 
 *libname;
-libname table "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data";
+libname table "/mydirectory/Data";
 	
 *filepath to output;
-ods excel file="/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Results/table2.xlsx";
+ods excel file="/mydirectory/table2.xlsx";
 ods escapechar="^";
 %LET PLUSMIN=%SYSFUNC(BYTE(177)) ;
 
@@ -42,7 +42,7 @@ run;
 
 *import data;
 proc import out = temp
-datafile = "/schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Data/la_letters_prescriber_demos.xlsx"
+datafile = "/mydirectory/la_letters_prescriber_demos.xlsx"
 dbms = xlsx;
 getnames = yes;
 run;
