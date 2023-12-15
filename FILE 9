@@ -1,3 +1,9 @@
+/*************************************************************************************************************************************
+*FILE GOALS                                                                                                                          *
+*****1. CHECK WHETHER >20% DME DROP PRE-TO-POST DIFFERS BY STUDY ARM, CONTROLLING FOR NEW PATIENT STARTS AND OPIOID CO-PRESCRIPIONS  *                                                                                                    *                                                                           *
+*ES DECEMBER 12, 2023                                                                                                                *
+**************************************************************************************************************************************/
+
 *directories
 include setup.do
 global data $mydirectory
