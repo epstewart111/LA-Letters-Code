@@ -28,7 +28,7 @@
          2. Three-way interaction tesing whether letter effect post-intervention was stronger for prescribers who had muliple decedents and received multiple comparator letters
      
     SOFTWARE
-    SAS version 9.4, STATA software version 16, and R version 3.6.0
+    SAS version 9.4, STATA software version 16, and R version 4.3.2
 
     LICENSE
     Schaeffer Center for Health Policy and Economics, University Southern California
@@ -37,47 +37,78 @@
         FILE 1 (SAS)
             1. Imports CURES Rx data 
             2. Obtains drug strength, pill qty, and conversion factor per Rx
-            3. Calculates MME per Rx
+            3. Calculates MME and DME per Rx
             4. Removes secondary decedents; post-intervention period is defined by first decedent's letter sent date 
-            5. Calculates no. of Rxs, prescribers, and decedents at each study phase for constort diagram Figure 1
-            6. Creates cleaned dataset called "letters_sample_mme"
+            5. Calculates no. of Rxs, prescribers, and decedents at each study phase for constort diagram Figures 1 and 2
+            6. Creates cleaned dataset "letters_sample_mme" and "letters_sample_dme"
 
         FILE 2 (STATA)
-            1. Imports letters_sample_mme
-            2. Creates flat file which has total, daily MME per-prescriber, called "analytic_daily_mme"
+            1. Imports letters_sample_mme/letters_sample_dme
+            2. Creates flat file which has total, daily MME (analytic_daily_mme) or DME (analytic_daily_dme) per-prescriber
                a. Unused because of model convergence issues
-            3. Creates flat file which has total, weekly MME per-prescriber, called "analytic_weekly_mme"
-            4. Adds variables for post-intervention, log MME, no. of decedents, study start, study_end, no. of new patients, and high dose Rxs (50 and 90 MME)
+            3. Creates flat file which has total, weekly MME (analytic_weekly_mme) or DME (analytic_daily_dme) per-prescriber
+            4. Adds variables for post-intervention, log outcome, no. of decedents, study start, study_end, no. of new patients, and high dose Rxs (50 and 90 MME)
 
         FILE 3 (SAS)
             1. Imports decedent data
             2. Uses proc sql, proc ttest, and proc freq to get counts (%) and mean (sd) between study arms for decedent Table 1
+            3. Ods excel outputs Table 1 
 
         FILE 4 (SAS)
             1. Imports presciber data
-            2. Uses proc sql and proc freq to get counts (%) between study arms for prescriber Table 2
+            2. Uses proc sql, proc t-test, and proc freq to get counts (%) between study arms for prescriber Table 2
+            3. Ods excel outputs Table 2 
 
         FILE 5 (STATA)
-            1. Imports analytic_weekly_mme
-            2. Metobit testing interaction between intervention and letter effect (is_let*post)
-            3. Adjusts post-intervention, per-prescriber, weekly MME for each letter group
-            4. Calculates pre-intervention means for each letter group and trims by 9
+            1. Imports analytic_weekly_mme/analytic weekly_dme
+            2. Metobit tests two-way interaction between intervention and letter (is_let*post)
+            3. Adjusts post-intervention, per-prescriber, weekly MME/DME for each letter group
+            4. Calculates, and trims pre-intervention means
             5. Bootstraps 95% confidence intervals for difference in pre- to post-intervention effects, and difference-in-difference between study arms
-            6. Melogits testing interaction between intervention and letter effect (is_let*post) for high-dose Rxs, and new patient starts
-            7. Lincom tests difference in study start and study end coefficients
-            8. Converts results to matrices, and exports
+            6. Melogits tests two-way interaction between intervention and letter (is_let*post) for high-dose Rxs, and new patient starts
+            7. Meobit tests three-way interaction beween intervention, letter, and number of decedents (is_let*post*decid_cat)
+            8. Melogit tests two-way interaction between letter and study start, and study end
+            9. Lincom tests difference in study start and study end coefficients
+            10. Converts results to matrices, and exports
 
         FILE 6 (STATA)
-            1. Imports analytic_weekly_mme
-            2. Metobit testing interaction between intervention, letter effect, and no. of decedents (is_let*post*decid_cat)
-            3. Adjusts post-intervention, per-prescriber, weekly MME for each letter and decedent group
-            4. Calculates pre-intervention means for each letter and decedent group, and trims by 9%
-            5. Bootstraps 95% confidence intervals for difference in pre- to post-int effects between study arms and decedent groups
-            6. Converts results to matrix and exports
+            1. Imports analyic_weekly_mme or analytic_weekly_vme
+            2. Quantile-quantile (QQ) plots for raw MME/DME and log MME or DME 
 
-        FILE 7 (R) 
-            1. Creates dataframe with adjusted post-intervention mean MME by each letter and decedent group
-            2. Uses ggplot to create Figure 2
+        FILE 7 (SAS) 
+            1. Imports analytic_weekly_mme/analytic_weekly_vme 
+            2. Proc sql calculates total, per-clinician MME/DME by letter, no. decedents for pre- and post- periods
+            3. Data step for log total MME/DME
+            4. Proc means for mean and median total MME/DME by letter and no. of decedents for pre- and post- periods
+            5. Proc export to export box_data_mme/box_data_vme for R box plots
+            6. Proc sql calculates total MME/DME by letter or no. of decedents, takes log, and replaces missing logs to 0
+            7. Proc means calculates and output q1 and q3
+            8. Proc sql joins q1 and q3 with sample, and caclulates outliers using Tukey's fences 
+            9. Proc freq chi-square for no. of outliers by letter and no. of decedents 
+            10. Proc means for t-test testing difference is mean log MME/DME and MME/DME by letter and no. of decedents 
+            
+        FILE 8 (R)
+            1. Load libraries and specify user-defined function inputs 
+            2. Imports box_data_mme/box_data_vme, and case_when to create no. of decedents by letter group 
+            3. Function changes graph background, font style, tick marks, aspect ratio, and size 
+            4. Function for graph legend-creates separate boxplot with annotations 
+            5. Ggplot graphs boxplots and legend
+            6. Plot_grid, dml, add_slide, ph_with, print (target) creates and exports editable .pptx plot
+
+        FILE 9 (STATA)
+            1. Imports analytic_daily_vme 
+            2. Collapse creates file with mean per-clinician DME, and total no. new patients in the pre- and post- periods
+            3. Gen calculates absolute and percent change 
+            4. T-test tests change in absolute and percent change by letter 
+            5. Melogit tests large percentage change (>20% decrease) by letter
+            6. Merges with new patients and co-prescriptions 
+            7. Generates variable for total number of new patients 
+            8. Replaces clinicians with no co-prescriptions (missing) to zero
+            9. Corr checks correlations between letter, no. new patients, and opioid co-prescriptions 
+            10. By : summ calculates summary stats for no. new patiens and co-prescriptions by letter
+            11. melogit tests >20% decrease by letter, controlling for no. new patient and co-prescriptions 
+            12. Matrix extracts and puts results in matrices 
+            13. Putexcel output to excel doc.     
 
     CONTACT
     For questions regarding code or data access email Emily Stewart, epstewar@usc.edu, and corresponding author Jason Doctor, jdoctor@usc.edu, respectively 
