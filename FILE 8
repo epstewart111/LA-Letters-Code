@@ -47,7 +47,7 @@ legend.background = element_rect(color = "black", fill = "white")
 update_geom_defaults("text", list(size = 5, family = "serif"))
 
 #function to add boxplot legend
-#legend code citation: Exploring ggplot2 boxplots - Defining limits and adjusting style. https://waterdata.usgs.gov/blog/boxplots/ (2018). 
+#Code and annotation for legend: Exploring ggplot2 boxplots - Defining limits and adjusting style. https://waterdata.usgs.gov/blog/boxplots/ (2018). 
 ggplot_box_legend <- function(family = "serif"){
  
 # Create data to use in the boxplot legend:
@@ -153,7 +153,7 @@ panel.grid = element_blank(),
 aspect.ratio = 4/3,
 plot.title = element_text(hjust = 0, vjust = 6, size = 10)) +
 coord_cartesian(xlim = c(1.4,3.1), ylim = c(-600, 900)) +
-labs(title = "MME by letter type and number of decedents")
+labs(title = paste0(outcome, " by letter type and number of decedents")
  
 return(explain_plot)
 }
@@ -175,9 +175,6 @@ theme(legend.position = ("bottom"))
 #plot graph and legend
 p <- plot_grid(myg, legend_plot, nrow = 1, rel_widths = c(.6,.4))
 
-#save graph
-ggsave("/Users/emilystewart/Desktop/boxplot_mme.pdf", width=8.26772, height=9)
-
 #export to editable ppt
 p_dml <- rvg::dml(ggobj = p)
 p_dml
@@ -190,14 +187,16 @@ doc <- add_slide(doc, layout = "Title and Content", master = "Office Theme")
 doc <- ph_with(x = doc, p_dml, location = ph_location_type(type = "body"))
 
 #save
-print(doc, target = paste0("/Users/emilystewart/Desktop/", out, ""))
+print(doc, target = paste0("/mydirectory/", out, ""))
 }
 
 #run function
-#inputs
-#MME: box_data_mme.csv, 244, 25, 225, 16 ,1020, MME, boxplot_mme.pptx
-#DME: box_data_dme.csv, 252, 25, 235, 16 ,1056, DME, boxplot_dme.pptx
+#MME
+graph(box_data_mme.csv, 244, 25, 225, 16, 1020, MME, boxplot_mme.pptx)
 
-graph("box_data_mme.csv", 244, 25, 225, 16 ,1020, "MME", "boxplot_mme.pptx")
+#DME
+graph(box_data_vme.csv, 252, 25, 235, 16, 1056, DME, boxplot_dme.pptx)
+
+
 
 
