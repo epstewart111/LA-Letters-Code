@@ -1,0 +1,59 @@
+*directories
+include setup.do
+global data $mydirectory
+	
+*use daily file
+use $data/analytic_daily_vme, clear
+
+*get per-clinician mean vme by letter and time (pre vs. post)
+collapse (mean) dvme_total (mean) log_total (first) decid (sum) n_new_pat, by(presid is_let post)
+reshape wide dvme_total log_total n_new_pat, i(presid) j(post)
+ren (dvme_total0 log_total0 dvme_total1 log_total1) (before log_before after log_after)
+gen abs_log_chng = log_after - log_before
+gen abs_chng = after - before
+gen pct_chng = abs_chng/before
+gen lrg_pct_chng = (pct_chng < -.2 & !mi(pct_chng))
+
+*ttests 
+ttest abs_chng, by(is_let)
+ttest abs_log_chng, by(is_let)
+ttest pct_chng, by(is_let)
+
+*does large percentage drop in VME differ by letter?
+melogit lrg_pct_chng is_let || decid:
+
+*combine with patients with co-prescriptions
+merge 1:1 presid using $data/corx.dta
+ta _merge
+keep if _merge == 3
+drop _merge
+
+*total no. of new patients
+gen nnewpat = n_new_pat1 + n_new_pat0
+
+*convert missing corx to 0
+replace ncorx = 0 if mi(ncorx)
+
+foreach var in nnewpat ncorx {
+	gen `var'perc = `var'/npat
+}
+
+*correlation between variables
+corr is_let ncorxperc nnewpatperc
+corr pct_chng is_let ncorxperc nnewpatperc
+
+*summary stats by letter group 
+bys is_let: summ ncorxperc nnewpatperc
+
+*control for proportion new starts and patients with opioid rx
+putexcel set $dua/SD-CHCF/epstewar/LA_letters/Results/results_vme.xlsx, sheet(secondary) modify
+melogit lrg_pct_chng is_let c.ncorxperc c.nnewpatperc || decid:
+
+#output to excel
+matrix results = r(table)[1..6,1..4]
+matrix results = results'
+matrix rownames results = :is_let :ncorxperc :nnewpatperc :constant
+matrix list results
+putexcel A1 = ">20% reduction", bold
+putexcel A2 = matrix(results), names nformat(number_d4)
+putexcel A3:A6 B2:G2, bold
