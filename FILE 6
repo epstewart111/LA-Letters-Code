@@ -10,7 +10,7 @@ foreach var in mme vme {
 use mydirectory/analytic_weekly_`var', clear
 
 *output
-global output /schaeffer-a/sch-projects/dua-data-projects/SD-CHCF/epstewar/LA_letters/Graphs
+global output /mydirectory/Graphs
 
 *make variables lower-case
 rename *, lower
