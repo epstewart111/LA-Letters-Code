@@ -1,6 +1,6 @@
 
     PURPOSE
-    The LA-Letters-Code repository provides code for manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in Nature Communications      on ###
+    The LA-Letters-Code repository provides code for manuscript, "Planning prompts reduce opioid prescribing: A randomized trial" published in Nature Communications in January 2023
 
     DOI: 10.5281/zenodo.10263890
 
@@ -23,7 +23,6 @@
          3. New patients who received an opioid/benzo Rx
          4. >20% decrease in DME 
 
-     
          POST-HOC
          1. Equality of coefficients testing whether study start coefficient (weeks 4-22) differed from study end (weeks 23-52)
          2. Three-way interaction tesing whether letter effect post-intervention was stronger for prescribers who had muliple decedents and received multiple comparator letters
